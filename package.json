@@ -1,0 +1,30 @@
+{
+  "name": "scarlett-receptionist",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scarlett — Elenos AI voice receptionist. Vapi + Claude + Next.js. Single-tenant v1, multi-tenant-ready.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "provision": "tsx scripts/provision-assistant.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "@supabase/supabase-js": "^2.108.2",
+    "google-auth-library": "^10.7.0",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "twilio": "^6.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.0"
+  }
+}

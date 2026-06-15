@@ -1,0 +1,23 @@
+.claude
+CLAUDE.md
+
+# dependencies
+/node_modules
+
+# next
+/.next
+/out
+
+# env — NEVER commit secrets
+.env
+.env.local
+.env*.local
+
+# google service account key
+*-service-account.json
+gcloud-key.json
+
+# misc
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
