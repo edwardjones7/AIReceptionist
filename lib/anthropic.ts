@@ -43,7 +43,8 @@ export function toAnthropicMessages(
     if (m.role === "system") continue;
 
     if (m.role === "user") {
-      out.push({ role: "user", content: textOf(m.content) || " " });
+      // Anthropic rejects whitespace-only text blocks — use a real fallback.
+      out.push({ role: "user", content: textOf(m.content) || "(inaudible)" });
       continue;
     }
 
@@ -65,7 +66,7 @@ export function toAnthropicMessages(
           input: input as Record<string, unknown>,
         });
       }
-      if (blocks.length === 0) blocks.push({ type: "text", text: " " });
+      if (blocks.length === 0) blocks.push({ type: "text", text: "(continuing)" });
       out.push({ role: "assistant", content: blocks });
       continue;
     }
@@ -76,7 +77,7 @@ export function toAnthropicMessages(
       const block: Anthropic.ContentBlockParam = {
         type: "tool_result",
         tool_use_id: m.tool_call_id ?? "",
-        content: textOf(m.content),
+        content: textOf(m.content) || "(no result)",
       };
       const prev = out[out.length - 1];
       if (
@@ -92,9 +93,11 @@ export function toAnthropicMessages(
     }
   }
 
-  // Anthropic requires the first message to be a user turn.
+  // Anthropic requires the first message to be a user turn with non-whitespace
+  // content. Vapi conversations open with Scarlett's static greeting (an
+  // assistant turn), so prepend a real marker rather than a blank space.
   if (out.length === 0 || out[0].role !== "user") {
-    out.unshift({ role: "user", content: " " });
+    out.unshift({ role: "user", content: "(Call connected.)" });
   }
   return out;
 }
