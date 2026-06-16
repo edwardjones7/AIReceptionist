@@ -57,11 +57,13 @@ async function main() {
       model: "nova-3",
       language: "en",
     },
-    // ElevenLabs for Scarlett's voice. Replace voiceId with a chosen voice.
+    // Vapi's native voice provider (no third-party key needed). "Savannah" is a
+    // current female voice (v2). Swap voiceId for another Vapi voice, or move to
+    // an 11labs/Cartesia voice once those keys are connected in the dashboard.
     voice: {
-      provider: "11labs",
-      voiceId: "REPLACE_WITH_ELEVENLABS_VOICE_ID",
-      model: "eleven_turbo_v2_5",
+      provider: "vapi",
+      voiceId: "Savannah",
+      version: 2,
     },
     // Lifecycle webhook → our summary/notify route.
     server: {
