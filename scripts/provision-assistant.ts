@@ -6,7 +6,9 @@
 // TENANT=<id>. Vapi's assistant schema evolves; treat this payload as a strong
 // starting point and confirm fields against the Vapi dashboard/docs.
 
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" }); // primary
+config(); // .env fallback (does not override already-set vars)
 import { loadTenant } from "../lib/context";
 import { toolsForTenant } from "../lib/tools";
 import { firstMessage } from "../lib/personas/scarlett";

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "provision": "tsx scripts/provision-assistant.ts"
+    "provision": "tsx scripts/provision-assistant.ts",
+    "test:call": "tsx scripts/test-call.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

@@ -46,9 +46,15 @@ export async function checkAvailability(
     };
   }
 
-  const spoken = slots.map((s) => spokenTime(s.start, ctx.tenant.timezone));
+  // Give the model BOTH the friendly spoken time (to read aloud) and the exact
+  // ISO slot_start (to pass into book_discovery_call). The model must speak only
+  // the friendly time but book with the matching ISO verbatim.
+  const lines = slots.map(
+    (s, i) =>
+      `${i + 1}) ${spokenTime(s.start, ctx.tenant.timezone)} — slot_start=${s.start}`,
+  );
   return {
-    message: `Here are a few open times: ${spoken.join("; ")}. Which works best?`,
+    message: `Open times. Offer these to the caller by their friendly time only — do NOT read the slot_start values aloud. When the caller picks one, call book_discovery_call with that option's slot_start value exactly:\n${lines.join("\n")}`,
     data: { slots },
   };
 }
