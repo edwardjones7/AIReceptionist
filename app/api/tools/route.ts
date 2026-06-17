@@ -11,6 +11,7 @@ import { verifyVapiSecret } from "@/lib/auth";
 import { loadTenant } from "@/lib/context";
 import { runTool } from "@/lib/tools";
 import { upsertCallByVapiId } from "@/lib/supabase";
+import { isFounderNumber } from "@/lib/founder";
 import type { ToolContext } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
     callId: internalCallId ?? undefined,
     vapiCallId,
     callerNumber,
+    isFounder: isFounderNumber(callerNumber),
   };
 
   const results = await Promise.all(

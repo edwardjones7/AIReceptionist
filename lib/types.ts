@@ -63,6 +63,7 @@ export interface ToolContext {
   callId?: string; // our internal calls.id, if known
   vapiCallId?: string;
   callerNumber?: string;
+  isFounder?: boolean; // true when the caller is recognized as the founder/internal
 }
 
 export interface ToolResult {

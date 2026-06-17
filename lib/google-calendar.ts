@@ -175,6 +175,49 @@ export async function createEvent(opts: {
   return { eventId: ev.id, htmlLink: ev.htmlLink };
 }
 
+export interface CalEvent {
+  summary: string;
+  start: string; // ISO or date
+  end: string;
+}
+
+// List events on the calendar in [timeMin, timeMax], sorted by start. Used by
+// founder mode to read Ed's actual agenda.
+export async function listEvents(
+  timeMin: string,
+  timeMax: string,
+): Promise<CalEvent[]> {
+  const token = await accessToken();
+  const params = new URLSearchParams({
+    timeMin,
+    timeMax,
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "20",
+  });
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+      calendarId(),
+    )}/events?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    throw new Error(`events.list failed: ${res.status} ${await res.text()}`);
+  }
+  const data = (await res.json()) as {
+    items?: {
+      summary?: string;
+      start?: { dateTime?: string; date?: string };
+      end?: { dateTime?: string; date?: string };
+    }[];
+  };
+  return (data.items ?? []).map((e) => ({
+    summary: e.summary ?? "(busy)",
+    start: e.start?.dateTime ?? e.start?.date ?? "",
+    end: e.end?.dateTime ?? e.end?.date ?? "",
+  }));
+}
+
 export async function deleteEvent(eventId: string): Promise<void> {
   const token = await accessToken();
   await fetch(

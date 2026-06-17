@@ -4,8 +4,10 @@
 import { env } from "./env";
 import { verifyVapiSecret } from "./auth";
 import { loadTenant } from "./context";
-import { buildSystemPrompt } from "./personas/scarlett";
-import { toolsForTenant } from "./tools";
+import { buildSystemPrompt, buildFounderPrompt } from "./personas/scarlett";
+import { clientToolsFor, founderToolsFor } from "./tools";
+import { isFounderNumber } from "./founder";
+import { getStats } from "./stats";
 import {
   toAnthropicMessages,
   toAnthropicTools,
@@ -38,16 +40,37 @@ export async function handleLlm(req: Request): Promise<Response> {
     hour12: true,
   }).format(new Date());
 
-  const systemStable = buildSystemPrompt(tenant);
-  const systemVolatile = [
-    `Current date and time (${tenant.timezone}): ${nowSpoken}.`,
-    callerNumber ? `Caller's number: ${callerNumber}.` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const founder = isFounderNumber(callerNumber);
 
+  const systemStable = founder
+    ? buildFounderPrompt(tenant)
+    : buildSystemPrompt(tenant);
+
+  const volatileParts = [`Current date and time (${tenant.timezone}): ${nowSpoken}.`];
+  if (!founder && callerNumber) volatileParts.push(`Caller's number: ${callerNumber}.`);
+
+  // Founder mode: inject a quick snapshot so she can lead with numbers in the
+  // greeting without a tool round-trip. Best-effort — never block the call.
+  if (founder) {
+    try {
+      const [today, week] = await Promise.all([
+        getStats(tenant.id, "today", tenant.timezone),
+        getStats(tenant.id, "week", tenant.timezone),
+      ]);
+      volatileParts.push(
+        `SNAPSHOT — Today: ${today.calls} calls, ${today.booked} booked, ${today.leads} leads (${today.qualifiedLeads} qualified). ` +
+          `Last 7 days: ${week.calls} calls, ${week.booked} booked, ${week.leads} leads, book rate ${week.bookRatePct}%.`,
+      );
+    } catch (e) {
+      console.error("founder snapshot failed", e);
+    }
+  }
+
+  const systemVolatile = volatileParts.join(" ");
   const messages = toAnthropicMessages(body.messages ?? []);
-  const tools = toAnthropicTools(toolsForTenant(tenant));
+  const tools = toAnthropicTools(
+    founder ? founderToolsFor(tenant) : clientToolsFor(tenant),
+  );
 
   const stream = streamClaudeAsOpenAI({
     model: env.llmModel,

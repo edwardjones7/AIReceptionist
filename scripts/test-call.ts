@@ -66,10 +66,22 @@ function stubToolResult(name: string, args: Record<string, unknown>): string {
       return "After hours — callback captured and the founder was texted. (STUB)";
     case "book_job":
       return "Job request captured. (STUB)";
+    // founder-mode reporting stubs
+    case "get_stats":
+      return `${args.period ?? "today"}: 6 calls, 2 booked, 3 leads (2 qualified). Book rate 33%. (STUB)`;
+    case "get_recent_leads":
+      return "Last 3 leads: Mike Sullivan — new website + AI (qualified, 2h ago); Dana — just shopping (soft, 5h ago); after-hours callback. (STUB)";
+    case "get_upcoming_bookings":
+      return "2 upcoming: Wave Electrical Thursday at 1:00 PM; ALR Electric Friday at 10:00 AM. (STUB)";
+    case "get_schedule":
+      return `Your ${args.day ?? "today"}: ALR Electric Discovery Call at 1:00 PM; Internal Systems at 3:00 PM. (STUB)`;
     default:
       return "OK (STUB)";
   }
 }
+
+// Caller number for the active scenario (founder scenario overrides this).
+let callerNumber = "+15555550123";
 
 // Parse the OpenAI-format SSE stream from /api/llm into an assistant message.
 async function callLlm(messages: Msg[]): Promise<Msg> {
@@ -82,7 +94,7 @@ async function callLlm(messages: Msg[]): Promise<Msg> {
     body: JSON.stringify({
       model: "scarlett",
       messages,
-      call: { id: "test-call-1", customer: { number: "+15555550123" } },
+      call: { id: "test-call-1", customer: { number: callerNumber } },
       stream: true,
     }),
   });
@@ -164,37 +176,63 @@ async function turn(messages: Msg[], userText: string): Promise<void> {
   console.log("\x1b[31m  (hit tool-hop cap)\x1b[0m");
 }
 
-const SCENARIOS: Record<string, string[]> = {
-  info: [
-    "Hey, what kind of company is this?",
-    "How are you different from a regular web agency?",
-    "How much does a website run?",
-  ],
-  booking: [
-    "Hi, I run an electrical company and my website is terrible. Can we talk?",
-    "Sure, my name is Mike Sullivan.",
-    "Tuesday works.",
-    "It's 555-867-5309, and mike at sullivanelectric dot com.",
-  ],
-  lead: [
-    "I'm just shopping around, not ready to book anything yet.",
-    "Name's Dana, 555-111-2222. Just send me some info.",
-  ],
-  human: ["Can I just talk to a real person?"],
+interface Scenario {
+  caller?: string; // overrides the caller number (e.g. founder mode)
+  lines: string[];
+}
+
+const SCENARIOS: Record<string, Scenario> = {
+  info: {
+    lines: [
+      "Hey, what kind of company is this?",
+      "How are you different from a regular web agency?",
+      "How much does a website run?",
+    ],
+  },
+  booking: {
+    lines: [
+      "Hi, I run an electrical company and my website is terrible. Can we talk?",
+      "Sure, my name is Mike Sullivan.",
+      "Tuesday works.",
+      "It's 555-867-5309, and mike at sullivanelectric dot com.",
+    ],
+  },
+  lead: {
+    lines: [
+      "I'm just shopping around, not ready to book anything yet.",
+      "Name's Dana, 555-111-2222. Just send me some info.",
+    ],
+  },
+  human: { lines: ["Can I just talk to a real person?"] },
+  // Founder mode — calls from FOUNDER_CELL; expects an EA-style briefing.
+  founder: {
+    caller: process.env.FOUNDER_CELL,
+    lines: [
+      "How'd we do today?",
+      "Any new leads?",
+      "What's on my calendar today?",
+      "Who's booked coming up?",
+    ],
+  },
 };
 
 async function main() {
   const which = process.argv[2];
   const names = which ? [which] : Object.keys(SCENARIOS);
   for (const name of names) {
-    const script = SCENARIOS[name];
-    if (!script) {
+    const scenario = SCENARIOS[name];
+    if (!scenario) {
       console.error(`Unknown scenario "${name}". Options: ${Object.keys(SCENARIOS).join(", ")}`);
       process.exit(1);
     }
-    console.log(`\n\x1b[1m══ scenario: ${name} ══\x1b[0m`);
+    callerNumber = scenario.caller || "+15555550123";
+    if (name === "founder" && !scenario.caller) {
+      console.error("founder scenario needs FOUNDER_CELL set in .env.local");
+      process.exit(1);
+    }
+    console.log(`\n\x1b[1m══ scenario: ${name} (from ${callerNumber}) ══\x1b[0m`);
     const messages: Msg[] = [];
-    for (const userText of script) await turn(messages, userText);
+    for (const userText of scenario.lines) await turn(messages, userText);
   }
   console.log("\n\x1b[32m✓ done\x1b[0m");
 }

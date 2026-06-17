@@ -10,6 +10,10 @@ import { bookDiscoveryCall } from "./bookDiscoveryCall";
 import { captureLead } from "./captureLead";
 import { bookJob } from "./bookJob";
 import { transferToHuman } from "./transferToHuman";
+import { getStatsTool } from "./getStats";
+import { getRecentLeadsTool } from "./getRecentLeads";
+import { getUpcomingBookingsTool } from "./getUpcomingBookings";
+import { getScheduleTool } from "./getSchedule";
 
 export interface ToolDef {
   name: string;
@@ -19,6 +23,9 @@ export interface ToolDef {
     input: Record<string, unknown>,
     ctx: ToolContext,
   ) => Promise<ToolResult>;
+  // "client" tools are offered to outside callers; "founder" tools (read-only
+  // reporting) are offered only when the caller is recognized as the founder.
+  audience: "client" | "founder";
   // If false for the active tenant, the tool is not advertised to the model.
   enabledFor: (t: TenantConfig) => boolean;
 }
@@ -35,6 +42,7 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     handler: checkAvailability,
+    audience: "client",
     enabledFor: (t) => t.booking.discoveryCall.enabled,
   },
   {
@@ -57,6 +65,7 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     handler: bookDiscoveryCall,
+    audience: "client",
     enabledFor: (t) => t.booking.discoveryCall.enabled,
   },
   {
@@ -83,6 +92,7 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     handler: captureLead,
+    audience: "client",
     enabledFor: () => true,
   },
   {
@@ -106,6 +116,7 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     handler: bookJob,
+    audience: "client",
     enabledFor: (t) => t.booking.job.enabled, // dormant for Elenos
   },
   {
@@ -128,10 +139,83 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     handler: transferToHuman,
+    audience: "client",
     enabledFor: (t) => t.transfer.enabled,
+  },
+
+  // ── Founder-mode tools (read-only reporting; offered only to the founder) ──
+  {
+    name: "get_stats",
+    description:
+      "Get call/business metrics for a period. Use when the founder asks how things are going, today's or the week's numbers, book rate, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        period: { type: "string", enum: ["today", "week", "month"] },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    handler: getStatsTool,
+    audience: "founder",
+    enabledFor: () => true,
+  },
+  {
+    name: "get_recent_leads",
+    description:
+      "List the most recent leads with name, intent, and status. Use when the founder asks about recent leads or who's been calling.",
+    parameters: {
+      type: "object",
+      properties: { limit: { type: "integer" } },
+      required: [],
+      additionalProperties: false,
+    },
+    handler: getRecentLeadsTool,
+    audience: "founder",
+    enabledFor: () => true,
+  },
+  {
+    name: "get_upcoming_bookings",
+    description:
+      "List upcoming booked discovery calls (who and when). Use when the founder asks what's on the books or who's booked.",
+    parameters: {
+      type: "object",
+      properties: { limit: { type: "integer" } },
+      required: [],
+      additionalProperties: false,
+    },
+    handler: getUpcomingBookingsTool,
+    audience: "founder",
+    enabledFor: () => true,
+  },
+  {
+    name: "get_schedule",
+    description:
+      "Read the founder's actual Google Calendar agenda for today or tomorrow. Use when he asks what's on his calendar / schedule.",
+    parameters: {
+      type: "object",
+      properties: { day: { type: "string", enum: ["today", "tomorrow"] } },
+      required: [],
+      additionalProperties: false,
+    },
+    handler: getScheduleTool,
+    audience: "founder",
+    enabledFor: () => true,
   },
 ];
 
+// Client-facing tools for outside callers.
+export function clientToolsFor(t: TenantConfig): ToolDef[] {
+  return TOOLS.filter((tool) => tool.audience === "client" && tool.enabledFor(t));
+}
+
+// Founder reporting tools (read-only). Offered only when the caller is the founder.
+export function founderToolsFor(t: TenantConfig): ToolDef[] {
+  return TOOLS.filter((tool) => tool.audience === "founder" && tool.enabledFor(t));
+}
+
+// All tools enabled for the tenant — used by the provision script so Vapi can
+// dispatch any of them (gating of who's *offered* what happens in /api/llm).
 export function toolsForTenant(t: TenantConfig): ToolDef[] {
   return TOOLS.filter((tool) => tool.enabledFor(t));
 }

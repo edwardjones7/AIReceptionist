@@ -43,6 +43,10 @@ async function main() {
 
   const assistant = {
     name: `${tenant.agentName} — ${tenant.displayName}`,
+    // Model-generated first line so the greeting adapts per caller (founder gets a
+    // personal "Hey Ed" briefing; everyone else gets the standard line, pinned in
+    // the prompt). firstMessage stays as a fallback.
+    firstMessageMode: "assistant-speaks-first-with-model-generated-message",
     firstMessage: firstMessage(tenant),
     // Custom LLM points back at our proxy (which injects Scarlett's prompt).
     model: {
