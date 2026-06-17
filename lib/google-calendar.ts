@@ -14,11 +14,17 @@ import { env } from "./env";
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
 
+// Calendar id, trimmed of any stray whitespace/newline that would otherwise
+// corrupt the request URL and yield a 404.
+function calendarId(): string {
+  return env.googleCalendarId.trim();
+}
+
 function jwtClient(): JWT {
-  // Support both literal-\n keys and already-newlined keys.
-  const key = env.googlePrivateKey().replace(/\\n/g, "\n");
+  // Support both literal-\n keys and already-newlined keys; trim stray edges.
+  const key = env.googlePrivateKey().replace(/\\n/g, "\n").trim();
   return new JWT({
-    email: env.googleClientEmail(),
+    email: env.googleClientEmail().trim(),
     key,
     scopes: SCOPES,
   });
@@ -64,7 +70,7 @@ export async function findOpenSlots(opts: {
         timeMin: timeMin.toISOString(),
         timeMax: timeMax.toISOString(),
         timeZone: opts.timezone,
-        items: [{ id: env.googleCalendarId }],
+        items: [{ id: calendarId() }],
       }),
     },
   );
@@ -74,7 +80,7 @@ export async function findOpenSlots(opts: {
   const fb = (await fbRes.json()) as {
     calendars: Record<string, { busy: { start: string; end: string }[] }>;
   };
-  const busy = fb.calendars[env.googleCalendarId]?.busy ?? [];
+  const busy = fb.calendars[calendarId()]?.busy ?? [];
 
   // Generate candidate slots on the hour and half-hour within business hours,
   // skip weekends, skip anything overlapping a busy block, in tenant tz.
@@ -83,10 +89,15 @@ export async function findOpenSlots(opts: {
   const [openH, openM] = opts.businessOpen.split(":").map(Number);
   const [closeH, closeM] = opts.businessClose.split(":").map(Number);
 
+  // Align the starting point to the next :00/:30 boundary, otherwise every
+  // candidate inherits timeMin's arbitrary minute offset and the :00/:30 filter
+  // below rejects all of them.
+  const step = 30 * 60_000;
+  const startAligned = Math.ceil(timeMin.getTime() / step) * step;
   for (
-    let d = new Date(timeMin);
+    let d = new Date(startAligned);
     d < timeMax && slots.length < (opts.count ?? 3);
-    d = new Date(d.getTime() + 30 * 60_000)
+    d = new Date(d.getTime() + step)
   ) {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: opts.timezone,
@@ -134,20 +145,20 @@ export async function createEvent(opts: {
   attendeeEmail?: string;
 }): Promise<CreateEventResult> {
   const token = await accessToken();
+  // NOTE: we intentionally do NOT set `attendees`. A plain service account
+  // (no domain-wide delegation) gets 403 "cannot invite attendees" if it tries.
+  // The caller's email/phone is captured in the event description instead.
   const body: Record<string, unknown> = {
     summary: opts.summary,
     description: opts.description,
     start: { dateTime: opts.start, timeZone: opts.timezone },
     end: { dateTime: opts.end, timeZone: opts.timezone },
   };
-  if (opts.attendeeEmail) {
-    body.attendees = [{ email: opts.attendeeEmail }];
-  }
 
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      env.googleCalendarId,
-    )}/events?sendUpdates=all`,
+      calendarId(),
+    )}/events`,
     {
       method: "POST",
       headers: {
@@ -162,6 +173,16 @@ export async function createEvent(opts: {
   }
   const ev = (await res.json()) as { id: string; htmlLink?: string };
   return { eventId: ev.id, htmlLink: ev.htmlLink };
+}
+
+export async function deleteEvent(eventId: string): Promise<void> {
+  const token = await accessToken();
+  await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+      calendarId(),
+    )}/events/${encodeURIComponent(eventId)}`,
+    { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+  );
 }
 
 // Re-check that a specific slot is still free right before booking (avoids
@@ -182,13 +203,13 @@ export async function isSlotFree(
       timeMin: start,
       timeMax: end,
       timeZone: timezone,
-      items: [{ id: env.googleCalendarId }],
+      items: [{ id: calendarId() }],
     }),
   });
   if (!res.ok) return true; // fail open — better to attempt the booking
   const fb = (await res.json()) as {
     calendars: Record<string, { busy: { start: string; end: string }[] }>;
   };
-  const busy = fb.calendars[env.googleCalendarId]?.busy ?? [];
+  const busy = fb.calendars[calendarId()]?.busy ?? [];
   return busy.length === 0;
 }
