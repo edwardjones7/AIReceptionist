@@ -12,6 +12,7 @@ export interface TenantConfig {
   displayName: string;
   agentName: string;
   agentGender: string;
+  founderPreferredName?: string; // what the assistant calls the founder in founder mode
   timezone: string;
   businessHours: BusinessHours;
   transfer: {

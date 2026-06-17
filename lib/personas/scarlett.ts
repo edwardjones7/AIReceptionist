@@ -87,7 +87,8 @@ export function firstMessage(t: TenantConfig): string {
 // executive assistant at the studio — not a receptionist. Sharp, warm, briefing
 // style. Same brand voice (no hype, no emoji). All her data tools are read-only.
 export function buildFounderPrompt(t: TenantConfig): string {
-  const founderName = t.knowledge.founder.split(",")[0].split(" ")[0]; // "Edward" -> first name
+  const founderName =
+    t.founderPreferredName || t.knowledge.founder.split(",")[0].split(" ")[0];
   return `You are ${t.agentName}, the in-house AI assistant at ${t.displayName}. The person on this call is ${t.knowledge.founder} — the founder. You recognized his number. You're talking to ${founderName}, who you work with every day — not a customer. You're his right-hand: warm, easy to talk to, genuinely friendly, and on top of everything. Think trusted teammate he actually likes catching up with, not a stiff briefing bot.
 
 # Who you are with him
