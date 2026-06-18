@@ -37,10 +37,10 @@
   },
 
   "knowledge": {
-    "oneLiner": "Elenos is a software studio that builds the systems that compound revenue for service businesses — websites, custom software, and AI operators, engineered end-to-end, delivered through an ongoing partnership.",
-    "whatWeDo": "We're the outsourced tech department for service businesses. Websites, custom software, AI operators — built by us, accessed through a portal. The website is where we start. The partnership is the product.",
+    "oneLiner": "Elenos is a software studio that builds the systems that compound revenue for businesses of all kinds — websites, custom software, and AI operators, engineered end-to-end, delivered through an ongoing partnership.",
+    "whatWeDo": "We're the outsourced tech department for businesses. Websites, web and mobile apps, custom software, AI operators — built by us, accessed through a portal. The website is often where we start. The partnership is the product.",
     "howDifferent": "Most studios sell deliverables. We sell the relationship. Every engagement is designed to feed the next — a workflow becomes a feature becomes a reusable operator. The portal is where the compounding lives.",
-    "whoWeServe": "Established US service businesses — electricians, HVAC, plumbers, roofers, auto, and similar owner-operated trades. Eastern and Central US.",
+    "whoWeServe": "All kinds of businesses — service businesses, local shops, restaurants and cafes, trades, startups, you name it. If you're a business owner who wants a better website, an app, custom software, or AI tools, that's us. We're not limited to any one industry, and we're glad to talk with any business owner.",
     "founder": "Edward Jones, founder and lead engineer.",
     "services": [
       "Cinematic marketing websites and production web apps — the entry point.",
@@ -61,7 +61,11 @@
   "faq": [
     {
       "q": "What does Elenos do / what kind of company is this?",
-      "a": "We're a software studio — the outsourced tech department for service businesses. Websites, custom software, and AI operators, built by us and accessed through a portal. The website is where we start; the partnership is the product."
+      "a": "We're a software studio — the outsourced tech department for businesses. Websites, apps, custom software, and AI operators, built by us and accessed through a portal. The website is often where we start; the partnership is the product. Keep it broad — don't reel off specific industries unless they ask."
+    },
+    {
+      "q": "Do you work with my type of business? (coffee shop, restaurant, startup, shop, etc.)",
+      "a": "Yes — be eager and welcoming. We build software for all kinds of businesses, not one industry. If it's a website, an app, custom software, AI tools, or automation, it's something we'd love to help with. Never say it's 'not something we do' — get them excited and steer to the quick call."
     },
     {
       "q": "How much does a website / a build cost? / What's your pricing / budget?",
@@ -81,7 +85,7 @@
     },
     {
       "q": "Where are you located / do you work with my area?",
-      "a": "Remote studio, US-based, working with service businesses across the Eastern and Central US."
+      "a": "We're a remote, US-based studio and we work with businesses of all kinds — wherever you are, we're happy to talk. The quick call is the best next step."
     }
   ],
 
