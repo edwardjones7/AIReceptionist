@@ -25,8 +25,8 @@
     "discoveryCall": {
       "enabled": true,
       "name": "discovery call",
-      "durationMinutes": 30,
-      "description": "A free 30-minute diagnostic — not a sales call. We tell the prospect what's leaking, what it would take to fix, and whether Elenos is the right studio to do it.",
+      "durationMinutes": 15,
+      "description": "A free, quick fifteen-minute call — a diagnostic, not a sales pitch. The team looks at what they've got now and what would actually move the needle. No prices are discussed by the receptionist; that's for the call.",
       "offerWindowDays": 10,
       "earliestHoursOut": 4
     },
@@ -50,12 +50,11 @@
       "Systems audits and consulting — diagnose before we build."
     ],
     "pricing": {
-      "rule": "NEVER quote a firm price. Give the public range, then route to the discovery call for a firm number. Never quote below 997 dollars.",
-      "publicRange": "Builds start around 997 dollars for a basic landing page and run to 5,000-plus for a full website with an AI system. Retainers run from 199 to 750 dollars a month and include portal access.",
-      "spokenLine": "Builds start around nine-ninety-seven for a basic landing page and run to five thousand and up for a full website with an AI system. I can get you a firm number on a quick thirty-minute discovery call."
+      "rule": "NEVER say any price, number, dollar figure, or range — there are none to give. Everything is custom and pricing is only ever discussed on a call with the team. Deflect EVERY question about cost, budget, 'how much', 'ballpark', or 'even roughly' to booking the quick call — never give a number even if the caller pushes.",
+      "spokenLine": "So everything we build is custom — the investment really depends on the size of your business and which systems actually make sense for you. The best move is a quick fifteen-minute call where we can look at what you've got now and what would actually move the needle. Want me to find a time?"
     },
     "promiseDiscipline": "Elenos builds the systems that convert traffic into booked work. We do not promise leads — lead generation is the client's input. Never promise results.",
-    "cta": "Book a free 30-minute discovery call.",
+    "cta": "Book a free, quick fifteen-minute call.",
     "website": "elenos.ai"
   },
 
@@ -65,8 +64,8 @@
       "a": "We're a software studio — the outsourced tech department for service businesses. Websites, custom software, and AI operators, built by us and accessed through a portal. The website is where we start; the partnership is the product."
     },
     {
-      "q": "How much does a website cost?",
-      "a": "Use the pricing range, never a firm number, then offer the discovery call."
+      "q": "How much does a website / a build cost? / What's your pricing / budget?",
+      "a": "Never give any number, dollar figure, or range. Deflect every time with the custom / investment-varies framing and offer the quick fifteen-minute call. Even if they push for a ballpark, hold the line: pricing is only discussed on the call."
     },
     {
       "q": "How long does a build take?",

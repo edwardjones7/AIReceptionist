@@ -44,7 +44,7 @@ export interface TenantConfig {
     whoWeServe: string;
     founder: string;
     services: string[];
-    pricing: { rule: string; publicRange: string; spokenLine: string };
+    pricing: { rule: string; publicRange?: string; spokenLine: string };
     promiseDiscipline: string;
     cta: string;
     website: string;
