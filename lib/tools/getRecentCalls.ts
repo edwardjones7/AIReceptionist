@@ -26,10 +26,11 @@ export async function getRecentCallsTool(
   const lines = calls.map((c) => {
     const who = c.caller_number || "a caller";
     const outcome = c.outcome ? `${c.outcome}` : "answered";
-    return `${who} (${outcome}, ${ago(c.created_at)}): ${c.summary}`;
+    const dur = c.duration_sec ? `, ${c.duration_sec}s` : "";
+    return `${who} (${outcome}${dur}, ${ago(c.created_at)}): ${c.summary}`;
   });
   return {
-    message: `Last ${calls.length} calls — ${lines.join(" | ")}`,
+    message: `Last ${calls.length} calls. ${lines.join(" || ")}`,
     data: { calls },
   };
 }

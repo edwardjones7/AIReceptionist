@@ -13,11 +13,15 @@ export async function getUpcomingBookingsTool(
   if (bookings.length === 0)
     return { message: "Nothing booked on the calendar coming up.", data: { bookings: [] } };
 
-  const lines = bookings.map(
-    (b) => `${b.name || "Unnamed"} on ${spokenTime(b.slot_start, ctx.tenant.timezone)}`,
+  const lines = bookings.map((b) =>
+    [
+      `${b.name || "Unnamed"} on ${spokenTime(b.slot_start, ctx.tenant.timezone)}`,
+      `phone: ${b.phone || "—"}`,
+      `email: ${b.email || "—"}`,
+    ].join("; "),
   );
   return {
-    message: `${bookings.length} upcoming: ${lines.join("; ")}.`,
+    message: `${bookings.length} upcoming. ${lines.join(" || ")}`,
     data: { bookings },
   };
 }

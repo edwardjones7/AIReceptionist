@@ -18,14 +18,23 @@ export async function getRecentLeadsTool(
 
   if (leads.length === 0) return { message: "No leads captured yet.", data: { leads: [] } };
 
+  // Full record per lead (everything that goes to Discord) so Scarlett has it all
+  // and can answer follow-ups like "what's their number/email". She gives the gist
+  // and reads specifics only when asked.
   const lines = leads.map((l) => {
     const who = l.name || "Unknown caller";
     const what = l.intent || "no stated intent";
     const q = l.qualified ? "qualified" : "soft";
-    return `${who} — ${what} (${q}, ${ago(l.created_at)})`;
+    const parts = [
+      `${who} — ${what} (${q}, ${l.status || "new"}, ${ago(l.created_at)})`,
+      `phone: ${l.phone || "—"}`,
+      `email: ${l.email || "—"}`,
+    ];
+    if (l.details) parts.push(`details: ${l.details}`);
+    return parts.join("; ");
   });
   return {
-    message: `Last ${leads.length} leads: ${lines.join("; ")}.`,
+    message: `Last ${leads.length} leads. ${lines.join(" || ")}`,
     data: { leads },
   };
 }

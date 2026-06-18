@@ -72,7 +72,10 @@ export async function getStats(
 
 export interface RecentLead {
   name: string | null;
+  phone: string | null;
+  email: string | null;
   intent: string | null;
+  details: string | null;
   qualified: boolean | null;
   status: string | null;
   created_at: string;
@@ -84,7 +87,7 @@ export async function getRecentLeads(
 ): Promise<RecentLead[]> {
   const { data } = await db()
     .from("leads")
-    .select("name,intent,qualified,status,created_at")
+    .select("name,phone,email,intent,details,qualified,status,created_at")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -118,6 +121,8 @@ export async function getRecentCalls(
 
 export interface UpcomingBooking {
   name: string | null;
+  phone: string | null;
+  email: string | null;
   slot_start: string;
   type: string;
 }
@@ -128,7 +133,7 @@ export async function getUpcomingBookings(
 ): Promise<UpcomingBooking[]> {
   const { data } = await db()
     .from("bookings")
-    .select("name,slot_start,type")
+    .select("name,phone,email,slot_start,type")
     .eq("tenant_id", tenantId)
     .gte("slot_start", new Date().toISOString())
     .order("slot_start", { ascending: true })
