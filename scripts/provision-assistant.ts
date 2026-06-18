@@ -41,23 +41,9 @@ async function main() {
     },
   }));
 
-  // Vapi's native transfer tool. When the model emits `transferCall`, Vapi bridges
-  // the live call to this number (the founder's cell). This is NOT a server tool —
-  // only Vapi can transfer a PSTN call. The model is told WHEN to use it via the
-  // system prompt (rarely — only on insistent/urgent callers).
-  const founderCell = process.env.FOUNDER_CELL;
-  if (tenant.transfer.enabled && founderCell) {
-    tools.push({
-      type: "transferCall",
-      destinations: [
-        {
-          type: "number",
-          number: founderCell,
-          message: "Sure — let me connect you. One moment.",
-        },
-      ],
-    });
-  }
+  // NOTE: real call transfer is the `transfer_call` server tool (in the registry
+  // above). Its handler performs the bridge via Vapi's live call-control URL
+  // (see lib/tools/transferCall.ts), so no native transferCall tool is needed here.
 
   const assistant = {
     name: `${tenant.agentName} — ${tenant.displayName}`,
@@ -93,6 +79,9 @@ async function main() {
       ...(secret ? { secret } : {}),
     },
     serverMessages: ["end-of-call-report"],
+    // Enable live call control so Vapi exposes monitor.controlUrl on tool-call
+    // webhooks — required for the transfer_call handler to bridge the call.
+    monitorPlan: { controlEnabled: true, listenEnabled: true },
     // Keep responses snappy; tune endpointing later.
     silenceTimeoutSeconds: 30,
     maxDurationSeconds: 1800,

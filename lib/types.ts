@@ -65,6 +65,7 @@ export interface ToolContext {
   vapiCallId?: string;
   callerNumber?: string;
   isFounder?: boolean; // true when the caller is recognized as the founder/internal
+  controlUrl?: string; // Vapi live-call control URL (for performing a transfer)
 }
 
 export interface ToolResult {

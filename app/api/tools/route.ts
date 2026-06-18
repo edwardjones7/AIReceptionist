@@ -47,7 +47,11 @@ export async function POST(req: NextRequest) {
       type?: string;
       toolCalls?: VapiToolCall[];
       toolCallList?: VapiToolCall[];
-      call?: { id?: string; customer?: { number?: string } };
+      call?: {
+        id?: string;
+        customer?: { number?: string };
+        monitor?: { controlUrl?: string };
+      };
     };
   };
 
@@ -57,6 +61,7 @@ export async function POST(req: NextRequest) {
 
   const vapiCallId = msg.call?.id;
   const callerNumber = msg.call?.customer?.number;
+  const controlUrl = msg.call?.monitor?.controlUrl;
   let internalCallId: string | null = null;
   if (vapiCallId) {
     internalCallId = await upsertCallByVapiId(tenant.id, vapiCallId, {
@@ -70,6 +75,7 @@ export async function POST(req: NextRequest) {
     vapiCallId,
     callerNumber,
     isFounder: isFounderNumber(callerNumber),
+    controlUrl,
   };
 
   const results = await Promise.all(

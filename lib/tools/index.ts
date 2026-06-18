@@ -9,6 +9,7 @@ import { checkAvailability } from "./checkAvailability";
 import { bookDiscoveryCall } from "./bookDiscoveryCall";
 import { captureLead } from "./captureLead";
 import { bookJob } from "./bookJob";
+import { transferCall } from "./transferCall";
 import { getStatsTool } from "./getStats";
 import { getRecentLeadsTool } from "./getRecentLeads";
 import { getRecentCallsTool } from "./getRecentCalls";
@@ -119,10 +120,25 @@ export const TOOLS: ToolDef[] = [
     audience: "client",
     enabledFor: (t) => t.booking.job.enabled, // dormant for Elenos
   },
-  // NOTE: real call transfer is handled by Vapi's native `transferCall` tool
-  // (configured in scripts/provision-assistant.ts and advertised to the model in
-  // lib/llm-handler.ts) — NOT a server tool here, because only Vapi can bridge a
-  // live PSTN call. Our endpoint just passes the transferCall tool-call through.
+  {
+    name: "transfer_call",
+    description:
+      "Connect the caller to a live person on the team. Use ONLY when the caller has clearly asked for a real person at least twice or is insistent, OR the matter is genuinely urgent/important and you can't help. Do not offer it proactively — prefer helping, taking their info, or booking the call.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          description: "One short line on why they need a person",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    handler: transferCall,
+    audience: "client",
+    enabledFor: (t) => t.transfer.enabled,
+  },
 
   // ── Founder-mode tools (read-only reporting; offered only to the founder) ──
   {
