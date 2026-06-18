@@ -12,6 +12,7 @@ import { bookJob } from "./bookJob";
 import { transferToHuman } from "./transferToHuman";
 import { getStatsTool } from "./getStats";
 import { getRecentLeadsTool } from "./getRecentLeads";
+import { getRecentCallsTool } from "./getRecentCalls";
 import { getUpcomingBookingsTool } from "./getUpcomingBookings";
 import { getScheduleTool } from "./getSchedule";
 
@@ -171,6 +172,20 @@ export const TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     handler: getRecentLeadsTool,
+    audience: "founder",
+    enabledFor: () => true,
+  },
+  {
+    name: "get_recent_calls",
+    description:
+      "Get summaries of recent calls — what each call was actually about, the outcome, and when. Use when the founder asks what a call/caller was about, what people wanted, or to recap recent calls (not just counts).",
+    parameters: {
+      type: "object",
+      properties: { limit: { type: "integer" } },
+      required: [],
+      additionalProperties: false,
+    },
+    handler: getRecentCallsTool,
     audience: "founder",
     enabledFor: () => true,
   },

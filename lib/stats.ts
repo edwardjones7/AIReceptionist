@@ -91,6 +91,31 @@ export async function getRecentLeads(
   return (data ?? []) as RecentLead[];
 }
 
+export interface RecentCall {
+  caller_number: string | null;
+  outcome: string | null;
+  summary: string | null;
+  duration_sec: number | null;
+  created_at: string;
+}
+
+// Recent completed calls with their AI-written summaries. Only returns calls that
+// actually have a summary (i.e. a real call that produced an end-of-call report,
+// not a bare row created by tool dispatch).
+export async function getRecentCalls(
+  tenantId: string,
+  limit = 5,
+): Promise<RecentCall[]> {
+  const { data } = await db()
+    .from("calls")
+    .select("caller_number,outcome,summary,duration_sec,created_at")
+    .eq("tenant_id", tenantId)
+    .not("summary", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as RecentCall[];
+}
+
 export interface UpcomingBooking {
   name: string | null;
   slot_start: string;
