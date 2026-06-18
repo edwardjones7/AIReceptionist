@@ -9,7 +9,6 @@ import { checkAvailability } from "./checkAvailability";
 import { bookDiscoveryCall } from "./bookDiscoveryCall";
 import { captureLead } from "./captureLead";
 import { bookJob } from "./bookJob";
-import { transferToHuman } from "./transferToHuman";
 import { getStatsTool } from "./getStats";
 import { getRecentLeadsTool } from "./getRecentLeads";
 import { getRecentCallsTool } from "./getRecentCalls";
@@ -120,29 +119,10 @@ export const TOOLS: ToolDef[] = [
     audience: "client",
     enabledFor: (t) => t.booking.job.enabled, // dormant for Elenos
   },
-  {
-    name: "transfer_to_human",
-    description:
-      "Connect the caller to a person. Only call this when the caller explicitly asks for a human, or you genuinely cannot help and it's time-sensitive. After hours this captures a callback instead of transferring.",
-    parameters: {
-      type: "object",
-      properties: {
-        reason: {
-          type: "string",
-          description: "One line on why a person is needed",
-        },
-        summary: {
-          type: "string",
-          description: "Short summary of the conversation so far",
-        },
-      },
-      required: ["reason"],
-      additionalProperties: false,
-    },
-    handler: transferToHuman,
-    audience: "client",
-    enabledFor: (t) => t.transfer.enabled,
-  },
+  // NOTE: real call transfer is handled by Vapi's native `transferCall` tool
+  // (configured in scripts/provision-assistant.ts and advertised to the model in
+  // lib/llm-handler.ts) — NOT a server tool here, because only Vapi can bridge a
+  // live PSTN call. Our endpoint just passes the transferCall tool-call through.
 
   // ── Founder-mode tools (read-only reporting; offered only to the founder) ──
   {

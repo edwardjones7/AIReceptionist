@@ -17,7 +17,7 @@
     "enabled": true,
     "mode": "cold",
     "inHoursTarget": "env:FOUNDER_CELL",
-    "rule": "Only transfer when the caller explicitly asks for a person, or when Scarlett genuinely cannot help and the matter is time-sensitive. In business hours, forward to the founder's cell. After hours, capture a callback and send an SMS alert instead — do not transfer.",
+    "rule": "Helping, capturing their info, and booking the call always come first — most callers never need a person, so don't offer a transfer proactively. Only transfer when the caller has clearly asked for a real person at least twice or is insistent about it, OR the matter is genuinely urgent or important and you can't help. Otherwise keep helping and offer to take their details or book the call.",
     "afterHoursBehavior": "capture_callback"
   },
 

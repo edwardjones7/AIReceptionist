@@ -42,7 +42,7 @@ export async function bookDiscoveryCall(
   try {
     const ev = await createEvent({
       summary: `${dc.name} — ${name} (${ctx.tenant.displayName})`,
-      description: `Booked by ${ctx.tenant.agentName} (AI receptionist).\nName: ${name}\nPhone: ${phone}\nEmail: ${email}`,
+      description: `Booked by ${ctx.tenant.agentName} (front desk).\nName: ${name}\nPhone: ${phone}\nEmail: ${email}`,
       start: start.toISOString(),
       end: end.toISOString(),
       timezone: ctx.tenant.timezone,

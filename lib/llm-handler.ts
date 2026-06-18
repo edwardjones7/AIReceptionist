@@ -72,6 +72,19 @@ export async function handleLlm(req: Request): Promise<Response> {
     founder ? founderToolsFor(tenant) : clientToolsFor(tenant),
   );
 
+  // Real call transfer: advertise Vapi's native transferCall to the model on
+  // client calls only. When the model emits it, Vapi bridges to the destination
+  // configured on the assistant (the founder's cell) — our endpoint just passes
+  // the tool-call through. Founder mode (Ed) never transfers.
+  if (!founder && tenant.transfer.enabled) {
+    tools.push({
+      name: "transferCall",
+      description:
+        "Transfer the live call to a member of the team. Use ONLY when the caller has clearly asked for a real person at least twice or is insistent, OR the matter is genuinely urgent/important and you cannot help. Do not offer it proactively — prefer helping, taking their info, or booking the call.",
+      input_schema: { type: "object", properties: {} },
+    } as (typeof tools)[number]);
+  }
+
   const stream = streamClaudeAsOpenAI({
     model: env.llmModel,
     systemStable,
