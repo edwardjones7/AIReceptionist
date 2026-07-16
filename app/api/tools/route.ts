@@ -8,10 +8,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyVapiSecret } from "@/lib/auth";
-import { loadTenant } from "@/lib/context";
+import { resolveTenant } from "@/lib/context";
 import { runTool } from "@/lib/tools";
 import { upsertCallByVapiId } from "@/lib/supabase";
-import { isFounderNumber } from "@/lib/founder";
+import { isOwnerNumber } from "@/lib/founder";
 import type { ToolContext } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -49,15 +49,23 @@ export async function POST(req: NextRequest) {
       toolCallList?: VapiToolCall[];
       call?: {
         id?: string;
+        assistantId?: string;
+        phoneNumberId?: string;
         customer?: { number?: string };
         monitor?: { controlUrl?: string };
       };
+      // Some Vapi versions hoist the assistant to the message level.
+      assistant?: { id?: string };
     };
   };
 
   const msg = body.message ?? {};
   const calls = msg.toolCallList ?? msg.toolCalls ?? [];
-  const tenant = loadTenant();
+  const resolved = await resolveTenant({
+    assistantId: msg.call?.assistantId ?? msg.assistant?.id,
+    phoneNumberId: msg.call?.phoneNumberId,
+  });
+  const tenant = resolved.config;
 
   const vapiCallId = msg.call?.id;
   const callerNumber = msg.call?.customer?.number;
@@ -71,10 +79,11 @@ export async function POST(req: NextRequest) {
 
   const ctx: ToolContext = {
     tenant,
+    settings: resolved.settings,
     callId: internalCallId ?? undefined,
     vapiCallId,
     callerNumber,
-    isFounder: isFounderNumber(callerNumber),
+    isFounder: isOwnerNumber(callerNumber, resolved.settings.ownerNumbers),
     controlUrl,
   };
 

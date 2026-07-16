@@ -10,6 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "provision": "tsx scripts/provision-assistant.ts",
+    "seed": "tsx scripts/seed-tenant.ts",
     "test:call": "tsx scripts/test-call.ts"
   },
   "dependencies": {
@@ -19,7 +20,8 @@
     "next": "^16.2.9",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "twilio": "^6.0.2"
+    "twilio": "^6.0.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

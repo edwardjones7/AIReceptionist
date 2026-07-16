@@ -3,22 +3,21 @@
 //  - events.insert: book a discovery call
 //
 // Setup (see README): create a service account, enable the Calendar API, and
-// SHARE the founder's calendar with the service-account email (Make changes to
-// events). Then GOOGLE_CALENDAR_ID is the founder's calendar address.
+// SHARE each client's calendar with the service-account email (Make changes to
+// events). The per-tenant calendar id lives on the tenants row (settings.calendarId);
+// the service-account credentials stay global.
 //
 // We call the REST API directly with a google-auth-library access token — no
 // extra googleapis dependency needed.
+//
+// Every function takes the target calendarId explicitly. Callers must pass it
+// trimmed (stray whitespace corrupts the request URL and yields a 404) —
+// lib/context.ts trims on load.
 
 import { JWT } from "google-auth-library";
 import { env } from "./env";
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
-
-// Calendar id, trimmed of any stray whitespace/newline that would otherwise
-// corrupt the request URL and yield a 404.
-function calendarId(): string {
-  return env.googleCalendarId.trim();
-}
 
 function jwtClient(): JWT {
   // Support both literal-\n keys and already-newlined keys; trim stray edges.
@@ -36,6 +35,42 @@ async function accessToken(): Promise<string> {
   return token;
 }
 
+// Preflight probe: can the service account actually see this calendar?
+// freeBusy returns 200 even for an unshared/unknown calendar — the failure is
+// inside calendars[id].errors — so inspect the body, not just the status.
+export async function checkCalendarAccess(
+  calendarId: string,
+): Promise<{ ok: boolean; detail: string }> {
+  const token = await accessToken();
+  const now = new Date();
+  const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      timeMin: now.toISOString(),
+      timeMax: new Date(now.getTime() + 3600_000).toISOString(),
+      items: [{ id: calendarId }],
+    }),
+  });
+  if (!res.ok) {
+    return { ok: false, detail: `freeBusy ${res.status}: ${(await res.text()).slice(0, 200)}` };
+  }
+  const fb = (await res.json()) as {
+    calendars?: Record<string, { errors?: { reason?: string }[] }>;
+  };
+  const reason = fb.calendars?.[calendarId]?.errors?.[0]?.reason;
+  if (reason) {
+    return {
+      ok: false,
+      detail: `calendar ${reason} — share it with ${env.googleClientEmail().trim()}`,
+    };
+  }
+  return { ok: true, detail: "reachable by the service account" };
+}
+
 export interface Slot {
   start: string; // ISO
   end: string; // ISO
@@ -44,6 +79,7 @@ export interface Slot {
 // Return up to `count` open slots of `durationMinutes`, within business hours,
 // over the next `windowDays`, starting at least `earliestHoursOut` from now.
 export async function findOpenSlots(opts: {
+  calendarId: string;
   durationMinutes: number;
   windowDays: number;
   earliestHoursOut: number;
@@ -70,7 +106,7 @@ export async function findOpenSlots(opts: {
         timeMin: timeMin.toISOString(),
         timeMax: timeMax.toISOString(),
         timeZone: opts.timezone,
-        items: [{ id: calendarId() }],
+        items: [{ id: opts.calendarId }],
       }),
     },
   );
@@ -80,7 +116,7 @@ export async function findOpenSlots(opts: {
   const fb = (await fbRes.json()) as {
     calendars: Record<string, { busy: { start: string; end: string }[] }>;
   };
-  const busy = fb.calendars[calendarId()]?.busy ?? [];
+  const busy = fb.calendars[opts.calendarId]?.busy ?? [];
 
   // Generate candidate slots on the hour and half-hour within business hours,
   // skip weekends, skip anything overlapping a busy block, in tenant tz.
@@ -137,6 +173,7 @@ export interface CreateEventResult {
 }
 
 export async function createEvent(opts: {
+  calendarId: string;
   summary: string;
   description: string;
   start: string; // ISO
@@ -157,7 +194,7 @@ export async function createEvent(opts: {
 
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      calendarId(),
+      opts.calendarId,
     )}/events`,
     {
       method: "POST",
@@ -184,6 +221,7 @@ export interface CalEvent {
 // List events on the calendar in [timeMin, timeMax], sorted by start. Used by
 // founder mode to read Ed's actual agenda.
 export async function listEvents(
+  calendarId: string,
   timeMin: string,
   timeMax: string,
 ): Promise<CalEvent[]> {
@@ -197,7 +235,7 @@ export async function listEvents(
   });
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      calendarId(),
+      calendarId,
     )}/events?${params.toString()}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
@@ -218,11 +256,14 @@ export async function listEvents(
   }));
 }
 
-export async function deleteEvent(eventId: string): Promise<void> {
+export async function deleteEvent(
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
   const token = await accessToken();
   await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      calendarId(),
+      calendarId,
     )}/events/${encodeURIComponent(eventId)}`,
     { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
   );
@@ -231,6 +272,7 @@ export async function deleteEvent(eventId: string): Promise<void> {
 // Re-check that a specific slot is still free right before booking (avoids
 // double-booking between the offer and the confirm).
 export async function isSlotFree(
+  calendarId: string,
   start: string,
   end: string,
   timezone: string,
@@ -246,13 +288,13 @@ export async function isSlotFree(
       timeMin: start,
       timeMax: end,
       timeZone: timezone,
-      items: [{ id: calendarId() }],
+      items: [{ id: calendarId }],
     }),
   });
   if (!res.ok) return true; // fail open — better to attempt the booking
   const fb = (await res.json()) as {
     calendars: Record<string, { busy: { start: string; end: string }[] }>;
   };
-  const busy = fb.calendars[calendarId()]?.busy ?? [];
+  const busy = fb.calendars[calendarId]?.busy ?? [];
   return busy.length === 0;
 }

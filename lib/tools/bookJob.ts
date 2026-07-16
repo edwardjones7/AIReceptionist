@@ -1,5 +1,5 @@
 import { db } from "../supabase";
-import { alertFounder } from "../notify";
+import { alertOwner } from "../notify";
 import type { ToolContext, ToolResult } from "../types";
 
 // DORMANT for Elenos. This is the trades-client template flow — booking an
@@ -47,7 +47,7 @@ export async function bookJob(
     status: "new",
   });
 
-  await alertFounder({
+  await alertOwner(ctx.settings, {
     title: "New job request",
     summary: `${name}: ${jobType} (${urgency})`,
     fields: [

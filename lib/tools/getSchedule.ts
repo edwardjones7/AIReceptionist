@@ -27,7 +27,14 @@ export async function getScheduleTool(
   const startUtc = new Date(Date.UTC(y, m - 1, d) - offsetMs);
   const endUtc = new Date(startUtc.getTime() + 86_400_000);
 
-  const events = await listEvents(startUtc.toISOString(), endUtc.toISOString());
+  if (!ctx.settings.calendarId) {
+    return { message: "No calendar is connected for this business yet.", isError: true };
+  }
+  const events = await listEvents(
+    ctx.settings.calendarId,
+    startUtc.toISOString(),
+    endUtc.toISOString(),
+  );
   if (events.length === 0) return { message: `Nothing on your calendar ${day}.`, data: { events: [] } };
 
   const fmt = (iso: string) =>

@@ -1,4 +1,3 @@
-import { env, resolveEnvRef } from "../env";
 import { db } from "../supabase";
 import { postDiscord } from "../notify";
 import type { ToolContext, ToolResult } from "../types";
@@ -11,7 +10,7 @@ export async function transferCall(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const target = resolveEnvRef(ctx.tenant.transfer.inHoursTarget) || env.founderCell;
+  const target = ctx.settings.transferNumber || ctx.settings.ownerNumbers[0] || "";
   const reason = String(input.reason ?? "").trim();
 
   // Can't transfer (no control URL or no number configured) → capture a callback.
@@ -29,7 +28,7 @@ export async function transferCall(
     } catch (e) {
       console.error("transfer callback lead insert failed", e);
     }
-    await postDiscord({
+    await postDiscord(ctx.settings.discordWebhookUrl, {
       title: "Caller asked for a person (couldn't transfer)",
       description: reason || "Transfer unavailable — callback captured.",
     });
@@ -71,7 +70,7 @@ export async function transferCall(
       () => {},
       () => {},
     );
-  postDiscord({
+  postDiscord(ctx.settings.discordWebhookUrl, {
     title: "Call transferred to a human",
     description: reason || "Caller asked for a person.",
   });

@@ -1,20 +1,25 @@
 // Notifications: Discord webhook (summaries + leads) and Twilio SMS (hot/urgent).
 // Both are best-effort and never throw into the call path.
+//
+// Destinations are per-tenant (settings on the tenants row); only the Twilio
+// sending credentials/number stay global.
 
 import twilio from "twilio";
 import { env } from "./env";
+import type { TenantSettings } from "./types";
 
-export async function postDiscord(opts: {
-  title: string;
-  description: string;
-  fields?: { name: string; value: string }[];
-  // Elenos accent color #a200ff
-  color?: number;
-}): Promise<void> {
-  const url = env.discordWebhookUrl;
-  if (!url) return;
+export async function postDiscord(
+  webhookUrl: string,
+  opts: {
+    title: string;
+    description: string;
+    fields?: { name: string; value: string }[];
+    color?: number;
+  },
+): Promise<void> {
+  if (!webhookUrl) return;
   try {
-    await fetch(url, {
+    await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -48,19 +53,22 @@ export async function sendSms(to: string, body: string): Promise<void> {
   }
 }
 
-// Alert the founder on a hot lead / urgent matter via both channels.
-export async function alertFounder(opts: {
-  title: string;
-  summary: string;
-  fields?: { name: string; value: string }[];
-  smsBody?: string;
-}): Promise<void> {
+// Alert the tenant's owner on a hot lead / urgent matter via both channels.
+export async function alertOwner(
+  settings: TenantSettings,
+  opts: {
+    title: string;
+    summary: string;
+    fields?: { name: string; value: string }[];
+    smsBody?: string;
+  },
+): Promise<void> {
   await Promise.all([
-    postDiscord({
+    postDiscord(settings.discordWebhookUrl, {
       title: opts.title,
       description: opts.summary,
       fields: opts.fields,
     }),
-    opts.smsBody ? sendSms(env.founderCell, opts.smsBody) : Promise.resolve(),
+    opts.smsBody ? sendSms(settings.notifyPhone, opts.smsBody) : Promise.resolve(),
   ]);
 }

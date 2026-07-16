@@ -7,10 +7,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyVapiSecret } from "@/lib/auth";
 import { env } from "@/lib/env";
-import { loadTenant } from "@/lib/context";
+import { resolveTenant } from "@/lib/context";
 import { anthropic } from "@/lib/anthropic";
 import { db, upsertCallByVapiId } from "@/lib/supabase";
 import { postDiscord } from "@/lib/notify";
+import type { TenantConfig } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,7 +19,14 @@ export const maxDuration = 60;
 interface VapiWebhookBody {
   message?: {
     type?: string;
-    call?: { id?: string; customer?: { number?: string } };
+    call?: {
+      id?: string;
+      assistantId?: string;
+      phoneNumberId?: string;
+      customer?: { number?: string };
+    };
+    // Some Vapi versions hoist the assistant to the message level.
+    assistant?: { id?: string };
     startedAt?: string;
     endedAt?: string;
     endedReason?: string;
@@ -36,15 +44,17 @@ interface CallSummary {
   outcome: "booked" | "lead" | "transferred" | "answered" | "missed";
 }
 
-async function summarize(transcript: string): Promise<CallSummary> {
+async function summarize(
+  transcript: string,
+  tenant: TenantConfig,
+): Promise<CallSummary> {
   const fallback: CallSummary = { summary: transcript.slice(0, 500), outcome: "answered" };
   if (!transcript.trim()) return { summary: "No transcript captured.", outcome: "missed" };
   try {
     const res = await anthropic().messages.create({
       model: env.summaryModel,
       max_tokens: 512,
-      system:
-        "You summarize a phone call handled by an AI receptionist for a software studio. Be concise and factual. Output strict JSON.",
+      system: `You summarize a phone call handled by ${tenant.agentName}, an AI receptionist for ${tenant.displayName}. Business context: ${tenant.knowledge.oneLiner} Be concise and factual. Output strict JSON.`,
       messages: [
         {
           role: "user",
@@ -87,7 +97,6 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json()) as VapiWebhookBody;
   const msg = body.message ?? {};
-  const tenant = loadTenant();
 
   // Acknowledge everything; only end-of-call-report does work.
   if (msg.type !== "end-of-call-report") {
@@ -97,8 +106,14 @@ export async function POST(req: NextRequest) {
   const vapiCallId = msg.call?.id;
   if (!vapiCallId) return NextResponse.json({ ok: true });
 
+  const resolved = await resolveTenant({
+    assistantId: msg.call?.assistantId ?? msg.assistant?.id,
+    phoneNumberId: msg.call?.phoneNumberId,
+  });
+  const tenant = resolved.config;
+
   const transcript = msg.artifact?.transcript ?? msg.transcript ?? "";
-  const { summary, outcome } = await summarize(transcript);
+  const { summary, outcome } = await summarize(transcript, tenant);
 
   const recordingUrl = msg.recordingUrl ?? msg.artifact?.recordingUrl ?? null;
   const costCents =
@@ -123,7 +138,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  await postDiscord({
+  await postDiscord(resolved.settings.discordWebhookUrl, {
     title: `Call summary — ${outcome}`,
     description: summary,
     fields: [

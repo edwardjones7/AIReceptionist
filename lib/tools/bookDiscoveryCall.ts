@@ -1,6 +1,6 @@
 import { createEvent, isSlotFree } from "../google-calendar";
 import { db } from "../supabase";
-import { alertFounder } from "../notify";
+import { alertOwner } from "../notify";
 import type { ToolContext, ToolResult } from "../types";
 import { spokenTime } from "./checkAvailability";
 
@@ -29,7 +29,10 @@ export async function bookDiscoveryCall(
   const end = new Date(start.getTime() + dc.durationMinutes * 60_000);
 
   // Re-check the slot is still free (avoid double-booking).
-  const free = await isSlotFree(start.toISOString(), end.toISOString(), ctx.tenant.timezone);
+  const calendarId = ctx.settings.calendarId;
+  const free =
+    !calendarId ||
+    (await isSlotFree(calendarId, start.toISOString(), end.toISOString(), ctx.tenant.timezone));
   if (!free) {
     return {
       message:
@@ -40,7 +43,9 @@ export async function bookDiscoveryCall(
 
   let eventId = "";
   try {
+    if (!calendarId) throw new Error("no calendarId configured for tenant");
     const ev = await createEvent({
+      calendarId,
       summary: `${dc.name} — ${name} (${ctx.tenant.displayName})`,
       description: `Booked by ${ctx.tenant.agentName} (front desk).\nName: ${name}\nPhone: ${phone}\nEmail: ${email}`,
       start: start.toISOString(),
@@ -83,7 +88,7 @@ export async function bookDiscoveryCall(
   });
 
   const when = spokenTime(start.toISOString(), ctx.tenant.timezone);
-  await alertFounder({
+  await alertOwner(ctx.settings, {
     title: "New discovery call booked",
     summary: `${name} booked a ${dc.name} for ${when}.`,
     fields: [

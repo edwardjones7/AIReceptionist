@@ -54,13 +54,39 @@ export interface TenantConfig {
     archetype: string;
     greeting: string;
     forbidden: string[];
+    provider?: string; // Vapi TTS provider; defaults to "vapi"
+    voiceId?: string; // provider voice id; defaults to "Savannah"
   };
+}
+
+// ── Per-tenant integration values (DB columns, not config JSON) ──
+// The credentials themselves (Google service account, Twilio, Anthropic) stay
+// global; these are the per-client *targets* they act on.
+
+export interface TenantSettings {
+  calendarId: string; // Google Calendar id shared with the service account; "" → booking degrades gracefully
+  discordWebhookUrl: string; // per-client Discord channel; "" → no Discord posts
+  notifyPhone: string; // SMS alert target for hot leads/transfers
+  transferNumber: string; // live-transfer destination
+  ownerNumbers: string[]; // caller IDs that unlock founder mode
+}
+
+// A fully-resolved tenant: config (prompt/behavior) + settings (integrations)
+// + provisioning state. This is what resolveTenant/loadTenantById return.
+export interface Tenant {
+  config: TenantConfig;
+  settings: TenantSettings;
+  vapiAssistantId: string | null;
+  vapiPhoneNumberId: string | null;
+  phoneNumber: string | null;
+  status: "draft" | "active" | "paused";
 }
 
 // ── Tool input/result types (provider-independent core) ──
 
 export interface ToolContext {
   tenant: TenantConfig;
+  settings: TenantSettings;
   callId?: string; // our internal calls.id, if known
   vapiCallId?: string;
   callerNumber?: string;

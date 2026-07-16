@@ -223,19 +223,25 @@ forbidden phrases. `lib/personas/scarlett.ts` holds her *behavior* (constant acr
 tenant); the config holds her *knowledge* (different per tenant). The persona reads the
 config; no business facts are baked into code.
 
-So standing up a second business is data, not engineering:
+So standing up a second business is data, not engineering. The primary path is the
+dashboard — no code, no deploys:
 
-1. Copy `config/elenos.tenant.json` → `config/<client>.tenant.json` and fill in their
-   knowledge, hours, pricing rules, FAQ, and transfer number. (To turn on on-site job
-   booking for a trades client, set `booking.job.enabled = true` — the dormant `book_job`
-   tool activates itself.)
-2. Insert the tenant row in Supabase.
-3. `TENANT=<client> npm run provision` — this reads the config and creates/updates a Vapi
-   assistant wired to *your* endpoints, with the right tools registered and the secret in
-   place.
-4. Attach their phone number and pick their voice in the Vapi dashboard.
+1. **`/admin` → New tenant.** Pick a template (`elenos` for consultative businesses,
+   `trades` for job-booking businesses — `booking.job.enabled` activates the `book_job`
+   tool), fill in the name, timezone, voice id, and integration targets.
+2. **Review the config** on the Config tab; edit knowledge, FAQ, hours, transfer rules.
+3. **Run preflight** on the Overview tab — it verifies the config schema, calendar
+   sharing, the Discord webhook, and phone targets before anything goes live.
+4. **Provision.** One click creates the Vapi assistant *and* the phone number — a free
+   Vapi number for demos, or an automated Twilio purchase + import for production
+   (optional area code). Voice comes from `config.voice.voiceId` (default Savannah);
+   changing it requires a re-provision.
 
-Same code, same backend. New file, new number, new receptionist.
+The CLI path still works: new `config/<client>.tenant.json` (register it in
+`lib/templates.ts` if it should appear in the dashboard template picker), then
+`npm run seed -- <client>` and `npm run provision -- <client>`.
+
+Same code, same backend. New row, new number, new receptionist.
 
 ---
 
@@ -281,15 +287,22 @@ All env access goes through `lib/env.ts` — don't read `process.env` directly.
 2. **Google Calendar** — create a project, enable the Calendar API, create a service
    account, download its JSON key. Share the founder's calendar with the service-account
    email ("Make changes to events"), and set `GOOGLE_CALENDAR_ID` to that calendar.
-3. **Twilio** — buy a local number; set the SID/token, the E.164 number, and
-   `FOUNDER_CELL` for alerts and transfers.
+3. **Twilio** — set the SID/token and `TWILIO_PHONE_NUMBER` (SMS sender), plus
+   `FOUNDER_CELL` for alerts and transfers. Number *purchase* is automated at provision
+   time — you don't buy numbers by hand.
 4. **Deploy** to Vercel (or any Node host); set every env var; set `PUBLIC_BASE_URL` to
    the deployed URL; generate a long random `VAPI_SERVER_SECRET`. (Local: tunnel
-   `npm run dev` with ngrok and point `PUBLIC_BASE_URL` at the tunnel.)
-5. **Provision** — `npm run provision`, then in the Vapi dashboard pick Scarlett's voice,
-   import the Twilio number and attach it, and confirm the assistant's server secret
-   matches `VAPI_SERVER_SECRET`. Copy the printed assistant id into `VAPI_ASSISTANT_ID`
-   (re-running `provision` updates in place).
+   `npm run dev` with ngrok and point `PUBLIC_BASE_URL` at the tunnel.) In production the
+   API routes **fail closed** without `VAPI_SERVER_SECRET` — it is not optional there.
+5. **Provision** — from `/admin` (preflight + one click) or `npm run provision -- <id>`.
+   This creates the assistant (voice from `config.voice.voiceId`), acquires and attaches
+   the phone number (Vapi free or Twilio buy+import), and wires the secret: header on
+   tool/webhook calls, `?token=` on the custom-LLM URL (Vapi doesn't reliably forward
+   the header there). Re-running updates in place.
+
+> **Upgrading from soft LLM auth:** `/api/llm` now rejects unauthenticated requests.
+> After deploying, re-provision every active tenant so their assistants pick up the
+> token-bearing custom-LLM URL — until then live calls will get 401s.
 
 ---
 
@@ -305,8 +318,8 @@ All env access goes through `lib/env.ts` — don't read `process.env` directly.
 5. **Hang up.** The `calls` row gets a summary and outcome; the Discord summary posts.
 6. **Call as the founder.** She greets you with today's numbers and can read back recent
    calls, leads, and the calendar on request.
-7. **Replicate.** Add `config/acme.tenant.json`, run `TENANT=acme npm run provision` — a
-   new assistant, no code changes.
+7. **Replicate.** `/admin` → New tenant → trades template → preflight → provision — a
+   new assistant and number, no code changes, no deploys.
 
 Run `npm run typecheck` before deploying.
 

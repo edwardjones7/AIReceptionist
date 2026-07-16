@@ -1,5 +1,5 @@
 import { db } from "../supabase";
-import { alertFounder, postDiscord } from "../notify";
+import { alertOwner, postDiscord } from "../notify";
 import type { ToolContext, ToolResult } from "../types";
 
 export async function captureLead(
@@ -40,7 +40,7 @@ export async function captureLead(
 
   if (qualified) {
     // Hot lead — fire SMS too.
-    await alertFounder({
+    await alertOwner(ctx.settings, {
       title: "New qualified lead",
       summary: `${name || "Caller"}: ${details || intent || "wants a callback"}`,
       fields,
@@ -48,7 +48,7 @@ export async function captureLead(
     });
   } else {
     // Soft lead — Discord only.
-    await postDiscord({
+    await postDiscord(ctx.settings.discordWebhookUrl, {
       title: "New lead",
       description: `${name || "Caller"}: ${details || intent || "left details"}`,
       fields,

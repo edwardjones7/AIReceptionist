@@ -3,10 +3,10 @@
 
 import { env } from "./env";
 import { verifyVapiSecret } from "./auth";
-import { loadTenant } from "./context";
+import { resolveTenant } from "./context";
 import { buildSystemPrompt, buildFounderPrompt } from "./personas/scarlett";
 import { clientToolsFor, founderToolsFor } from "./tools";
-import { isFounderNumber } from "./founder";
+import { isOwnerNumber } from "./founder";
 import { getStats } from "./stats";
 import {
   toAnthropicMessages,
@@ -18,16 +18,27 @@ import {
 interface LlmRequestBody {
   model?: string;
   messages?: OpenAIMessage[];
-  call?: { id?: string; customer?: { number?: string } };
+  call?: {
+    id?: string;
+    assistantId?: string;
+    phoneNumberId?: string;
+    customer?: { number?: string };
+  };
+  // Some Vapi versions hoist the assistant to the top level.
+  assistant?: { id?: string };
 }
 
 export async function handleLlm(req: Request): Promise<Response> {
-  if (!verifyVapiSecret(req, { soft: true })) {
+  if (!verifyVapiSecret(req)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   const body = (await req.json()) as LlmRequestBody;
-  const tenant = loadTenant();
+  const resolved = await resolveTenant({
+    assistantId: body.call?.assistantId ?? body.assistant?.id,
+    phoneNumberId: body.call?.phoneNumberId,
+  });
+  const tenant = resolved.config;
 
   const callerNumber = body.call?.customer?.number ?? "";
   const nowSpoken = new Intl.DateTimeFormat("en-US", {
@@ -40,7 +51,7 @@ export async function handleLlm(req: Request): Promise<Response> {
     hour12: true,
   }).format(new Date());
 
-  const founder = isFounderNumber(callerNumber);
+  const founder = isOwnerNumber(callerNumber, resolved.settings.ownerNumbers);
 
   const systemStable = founder
     ? buildFounderPrompt(tenant)

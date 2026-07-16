@@ -27,8 +27,17 @@ export async function checkAvailability(
   if (!hours) {
     return { message: "No business hours are configured.", isError: true };
   }
+  if (!ctx.settings.calendarId) {
+    // Tenant has no calendar connected yet — degrade to lead capture.
+    return {
+      message:
+        "I can't check the calendar right now. Let me take your details and have someone reach out to find a time that works.",
+      data: { slots: [] },
+    };
+  }
 
   const slots = await findOpenSlots({
+    calendarId: ctx.settings.calendarId,
     durationMinutes: dc.durationMinutes,
     windowDays: dc.offerWindowDays,
     earliestHoursOut: dc.earliestHoursOut,

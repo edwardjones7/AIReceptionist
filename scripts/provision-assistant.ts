@@ -1,122 +1,34 @@
-// Provision (create or update) the Vapi assistant for a tenant from its config.
-// Run: npm run provision   (reads .env.local)
+// CLI wrapper over lib/provision.ts — provision (create or update) the Vapi
+// assistant + phone number for a tenant from its row in Supabase.
 //
-// This is the "spin up a client" script — the replicability seam. A second
-// client is a new config/<id>.tenant.json + a re-run of this script with
-// TENANT=<id>. Vapi's assistant schema evolves; treat this payload as a strong
-// starting point and confirm fields against the Vapi dashboard/docs.
+// Run: npm run provision [-- <tenantId>]     (defaults to TENANT env, then "elenos")
+//
+// The tenant must be seeded first (npm run seed -- <id>) or created in the
+// admin dashboard. The dashboard's Provision button calls the same code path.
 
 import { config } from "dotenv";
 config({ path: ".env.local" }); // primary
 config(); // .env fallback (does not override already-set vars)
-import { loadTenant } from "../lib/context";
-import { toolsForTenant } from "../lib/tools";
-import { firstMessage } from "../lib/personas/scarlett";
-
-const VAPI_BASE = "https://api.vapi.ai";
-
-function need(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env: ${name}`);
-  return v;
-}
 
 async function main() {
-  const tenant = loadTenant();
-  const apiKey = need("VAPI_API_KEY");
-  const base = need("PUBLIC_BASE_URL").replace(/\/$/, "");
-  const secret = process.env.VAPI_SERVER_SECRET ?? "";
-  const llmModel = process.env.LLM_MODEL ?? "claude-haiku-4-5";
+  // Import after dotenv so lib/env sees the vars.
+  const { provisionTenant } = await import("../lib/provision");
 
-  const tools: unknown[] = toolsForTenant(tenant).map((t) => ({
-    type: "function" as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-    },
-    server: {
-      url: `${base}/api/tools`,
-      ...(secret ? { secret } : {}),
-    },
-  }));
+  const id = process.argv[2] ?? process.env.TENANT ?? "elenos";
+  const numberProvider =
+    process.env.NUMBER_PROVIDER === "twilio" ? ("twilio" as const) : ("vapi" as const);
 
-  // NOTE: real call transfer is the `transfer_call` server tool (in the registry
-  // above). Its handler performs the bridge via Vapi's live call-control URL
-  // (see lib/tools/transferCall.ts), so no native transferCall tool is needed here.
+  const result = await provisionTenant(id, { numberProvider });
 
-  const assistant = {
-    name: `${tenant.agentName} — ${tenant.displayName}`,
-    // Model-generated first line so the greeting adapts per caller (founder gets a
-    // personal "Hey Ed" briefing; everyone else gets the standard line, pinned in
-    // the prompt). firstMessage stays as a fallback.
-    firstMessageMode: "assistant-speaks-first-with-model-generated-message",
-    firstMessage: firstMessage(tenant),
-    // Custom LLM points back at our proxy (which injects Scarlett's prompt).
-    model: {
-      provider: "custom-llm",
-      url: `${base}/api/llm`,
-      model: llmModel,
-      tools,
-    },
-    // Deepgram Nova-3 for STT.
-    transcriber: {
-      provider: "deepgram",
-      model: "nova-3",
-      language: "en",
-    },
-    // Vapi's native voice provider (no third-party key needed). "Savannah" is a
-    // current female voice (v2). Swap voiceId for another Vapi voice, or move to
-    // an 11labs/Cartesia voice once those keys are connected in the dashboard.
-    voice: {
-      provider: "vapi",
-      voiceId: "Savannah",
-      version: 2,
-    },
-    // Lifecycle webhook → our summary/notify route.
-    server: {
-      url: `${base}/api/vapi/webhook`,
-      ...(secret ? { secret } : {}),
-    },
-    serverMessages: ["end-of-call-report"],
-    // Enable live call control so Vapi exposes monitor.controlUrl on tool-call
-    // webhooks — required for the transfer_call handler to bridge the call.
-    monitorPlan: { controlEnabled: true, listenEnabled: true },
-    // Keep responses snappy; tune endpointing later.
-    silenceTimeoutSeconds: 30,
-    maxDurationSeconds: 1800,
-  };
-
-  const existingId = process.env.VAPI_ASSISTANT_ID;
-  const url = existingId
-    ? `${VAPI_BASE}/assistant/${existingId}`
-    : `${VAPI_BASE}/assistant`;
-  const method = existingId ? "PATCH" : "POST";
-
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(assistant),
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    console.error(`Vapi ${method} failed: ${res.status}`);
-    console.error(text);
-    process.exit(1);
-  }
-
-  const data = JSON.parse(text) as { id: string };
-  console.log(`✅ Assistant ${existingId ? "updated" : "created"}: ${data.id}`);
-  if (!existingId) {
-    console.log(`\nAdd to .env.local:\n  VAPI_ASSISTANT_ID=${data.id}`);
-    console.log(
-      `\nNext: attach a phone number to this assistant in the Vapi dashboard,\n` +
-        `set the ElevenLabs voiceId, and place a test call.`,
-    );
+  console.log(
+    `✅ Assistant ${result.assistantCreated ? "created" : "updated"}: ${result.assistantId}`,
+  );
+  if (result.numberCreated) {
+    console.log(`✅ Number provisioned: ${result.phoneNumber}`);
+  } else if (result.phoneNumber) {
+    console.log(`ℹ️  Number already attached: ${result.phoneNumber}`);
+  } else {
+    console.log(`ℹ️  No number attached yet — provision again or attach in the Vapi dashboard.`);
   }
 }
 
