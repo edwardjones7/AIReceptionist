@@ -7,7 +7,7 @@ import { db } from "./supabase";
 import { env, resolveEnvRef } from "./env";
 import { safeParseTenantConfig } from "./config-schema";
 import { checkCalendarAccess } from "./google-calendar";
-import { getAssistant } from "./vapi";
+import { getAssistant, llmUrl, webhookUrl } from "./vapi";
 import type { TenantConfig } from "./types";
 
 export interface PreflightCheck {
@@ -133,13 +133,35 @@ export async function runPreflight(tenantId: string): Promise<PreflightReport> {
     add({ key: "notify", label: "Notify phone", status: "pass", detail: String(row.notify_phone) });
   }
 
-  // 6. Vapi assistant still exists (post-provision only; needs live Vapi).
+  // 6. Vapi assistant exists AND its URLs match this deployment + secret
+  // (post-provision only; needs live Vapi). Catches the silent-outage class
+  // where code/secret changes ship but the assistant is never re-provisioned:
+  // a stale model.url means every live call 401s. Vapi's GET redacts
+  // server.secret, so the ?token= in model.url is the credential check.
   if (!row.vapi_assistant_id) {
     add({ key: "assistant", label: "Vapi assistant", status: "skip", detail: "not provisioned yet" });
   } else {
     try {
-      await getAssistant(String(row.vapi_assistant_id));
-      add({ key: "assistant", label: "Vapi assistant", status: "pass", detail: String(row.vapi_assistant_id) });
+      const assistant = await getAssistant(String(row.vapi_assistant_id));
+      const stale: string[] = [];
+      if (env.publicBaseUrl) {
+        if (assistant.model?.url !== llmUrl(env.publicBaseUrl, env.vapiServerSecret)) {
+          stale.push("custom-LLM URL");
+        }
+        if (assistant.server?.url !== webhookUrl(env.publicBaseUrl)) {
+          stale.push("webhook URL");
+        }
+      }
+      if (stale.length) {
+        add({
+          key: "assistant",
+          label: "Vapi assistant",
+          status: "fail",
+          detail: `stale ${stale.join(" + ")} — re-provision to push current config (live calls may be failing)`,
+        });
+      } else {
+        add({ key: "assistant", label: "Vapi assistant", status: "pass", detail: `${row.vapi_assistant_id} — URLs current` });
+      }
     } catch (e) {
       add({ key: "assistant", label: "Vapi assistant", status: "fail", detail: (e as Error).message.slice(0, 200) });
     }

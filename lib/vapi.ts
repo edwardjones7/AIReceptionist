@@ -29,6 +29,20 @@ async function vapiFetch<T>(
   return (text ? JSON.parse(text) : {}) as T;
 }
 
+// The custom-LLM URL the assistant calls. The token rides in the URL because
+// Vapi doesn't reliably forward the secret header there. Single source of
+// truth — buildAssistantPayload writes it, preflight verifies against it.
+export function llmUrl(baseUrl: string, secret: string): string {
+  const base = baseUrl.replace(/\/$/, "");
+  return secret
+    ? `${base}/api/llm?token=${encodeURIComponent(secret)}`
+    : `${base}/api/llm`;
+}
+
+export function webhookUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/api/vapi/webhook`;
+}
+
 // Per-tenant TTS voice. `version: 2` is a vapi-provider-only field.
 function buildVoice(config: TenantConfig): Record<string, unknown> {
   const provider = config.voice.provider ?? "vapi";
@@ -75,9 +89,7 @@ export function buildAssistantPayload(
     // credential rides in the URL itself — verifyVapiSecret accepts ?token=.
     model: {
       provider: "custom-llm",
-      url: opts.secret
-        ? `${base}/api/llm?token=${encodeURIComponent(opts.secret)}`
-        : `${base}/api/llm`,
+      url: llmUrl(base, opts.secret),
       model: opts.llmModel,
       tools,
     },
@@ -88,7 +100,7 @@ export function buildAssistantPayload(
     },
     voice: buildVoice(config),
     server: {
-      url: `${base}/api/vapi/webhook`,
+      url: webhookUrl(base),
       ...(opts.secret ? { secret: opts.secret } : {}),
     },
     serverMessages: ["end-of-call-report"],
@@ -106,8 +118,14 @@ export async function createAssistant(
   return vapiFetch<{ id: string }>("/assistant", { method: "POST", body: payload });
 }
 
-export async function getAssistant(id: string): Promise<{ id: string }> {
-  return vapiFetch<{ id: string }>(`/assistant/${id}`, { method: "GET" });
+export interface AssistantSnapshot {
+  id: string;
+  model?: { url?: string };
+  server?: { url?: string };
+}
+
+export async function getAssistant(id: string): Promise<AssistantSnapshot> {
+  return vapiFetch<AssistantSnapshot>(`/assistant/${id}`, { method: "GET" });
 }
 
 export async function updateAssistant(
