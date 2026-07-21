@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getCall, getTranscripts, getCallLinks } from "@/lib/admin-queries";
-import { styles, Section, fmtDate, fmtCents } from "../../../../ui";
+import { fmtCents, fmtDate, fmtDuration } from "@/lib/format";
+import { KV, Section } from "@/components/section";
+import { Transcript } from "@/components/records/transcript";
 
 export const dynamic = "force-dynamic";
 
@@ -24,122 +26,78 @@ export default async function CallDetailPage({
 
   return (
     <main>
-      <p style={{ ...styles.faint, margin: 0 }}>
-        <Link href={`/admin/tenants/${id}/calls`} style={styles.link}>
+      <p className="text-xs text-muted-foreground/60">
+        <Link href={`/admin/tenants/${id}/calls`} className="text-primary hover:underline">
           calls
         </Link>{" "}
         / {fmtDate(call.started_at ?? call.created_at)}
       </p>
-      <h1 style={styles.h1}>Call — {call.outcome ?? "unknown outcome"}</h1>
+      <h1 className="mt-1 text-xl font-semibold">
+        Call — {call.outcome ?? "unknown outcome"}
+      </h1>
 
       <Section title="Details">
-        <table style={styles.table}>
-          <tbody>
-            <tr>
-              <td style={styles.td}>From</td>
-              <td style={styles.td}>{call.caller_number ?? "—"}</td>
-            </tr>
-            <tr>
-              <td style={styles.td}>Started</td>
-              <td style={styles.td}>{fmtDate(call.started_at)}</td>
-            </tr>
-            <tr>
-              <td style={styles.td}>Ended</td>
-              <td style={styles.td}>{fmtDate(call.ended_at)}</td>
-            </tr>
-            <tr>
-              <td style={styles.td}>Duration</td>
-              <td style={styles.td}>
-                {call.duration_sec ? `${call.duration_sec}s` : "—"}
-              </td>
-            </tr>
-            <tr>
-              <td style={styles.td}>Vapi cost</td>
-              <td style={styles.td}>
-                {call.cost_cents != null ? fmtCents(call.cost_cents) : "—"}
-              </td>
-            </tr>
-            <tr>
-              <td style={styles.td}>Recording</td>
-              <td style={styles.td}>
-                {call.recording_url ? (
-                  <a
-                    href={call.recording_url}
-                    style={styles.link}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    listen
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </td>
-            </tr>
-            <tr>
-              <td style={styles.td}>Vapi call id</td>
-              <td style={{ ...styles.td, ...styles.faint }}>
+        <KV
+          rows={[
+            ["From", call.caller_number ?? "—"],
+            ["Started", fmtDate(call.started_at)],
+            ["Ended", fmtDate(call.ended_at)],
+            ["Duration", fmtDuration(call.duration_sec)],
+            ["Vapi cost", call.cost_cents != null ? fmtCents(call.cost_cents) : "—"],
+            [
+              "Vapi call id",
+              <span key="v" className="text-xs text-muted-foreground/60">
                 {call.vapi_call_id ?? "—"}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </span>,
+            ],
+          ]}
+        />
       </Section>
 
       <Section title="Summary">
-        <p style={{ color: "#aaa", margin: 0, lineHeight: 1.6 }}>
+        <p className="text-sm leading-relaxed text-muted-foreground">
           {call.summary ?? "No summary."}
         </p>
       </Section>
 
       <Section title="Transcript">
-        {transcripts.length === 0 ? (
-          <p style={{ ...styles.dim, margin: 0 }}>No transcript stored.</p>
-        ) : (
-          transcripts.map((t) => (
-            <pre
-              key={t.id}
-              style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "inherit",
-                fontSize: 13,
-                color: "#ccc",
-                lineHeight: 1.6,
-                margin: "0 0 12px",
-              }}
-            >
-              {t.text}
-            </pre>
-          ))
-        )}
+        <Transcript rows={transcripts} recordingUrl={call.recording_url} />
       </Section>
 
       {links.leads.length > 0 || links.bookings.length > 0 || links.transfers.length > 0 ? (
         <Section title="From this call">
-          {links.leads.map((l) => (
-            <p key={l.id} style={{ fontSize: 13, margin: "0 0 8px" }}>
-              Lead — {l.name ?? "unknown"} ({l.phone ?? l.email ?? "no contact"})
-              {l.intent ? ` — ${l.intent}` : ""}{" "}
-              <Link href={`/admin/tenants/${id}/leads`} style={styles.link}>
-                view leads
-              </Link>
-            </p>
-          ))}
-          {links.bookings.map((b) => (
-            <p key={b.id} style={{ fontSize: 13, margin: "0 0 8px" }}>
-              Booking — {b.type ?? "booking"} for {b.name ?? "unknown"} at{" "}
-              {fmtDate(b.slot_start)} ({b.status ?? "—"}){" "}
-              <Link href={`/admin/tenants/${id}/bookings`} style={styles.link}>
-                view bookings
-              </Link>
-            </p>
-          ))}
-          {links.transfers.map((t) => (
-            <p key={t.id} style={{ fontSize: 13, margin: "0 0 8px" }}>
-              Transfer — {t.status ?? "—"} to {t.to_number ?? "—"}
-              {t.reason ? ` — ${t.reason}` : ""}
-            </p>
-          ))}
+          <div className="space-y-2 text-sm">
+            {links.leads.map((l) => (
+              <p key={l.id}>
+                Lead — {l.name ?? "unknown"} ({l.phone ?? l.email ?? "no contact"})
+                {l.intent ? ` — ${l.intent}` : ""}{" "}
+                <Link
+                  href={`/admin/tenants/${id}/leads`}
+                  className="text-primary hover:underline"
+                >
+                  view leads
+                </Link>
+              </p>
+            ))}
+            {links.bookings.map((b) => (
+              <p key={b.id}>
+                Booking — {b.type ?? "booking"} for {b.name ?? "unknown"} at{" "}
+                {fmtDate(b.slot_start)} ({b.status ?? "—"}){" "}
+                <Link
+                  href={`/admin/tenants/${id}/bookings`}
+                  className="text-primary hover:underline"
+                >
+                  view bookings
+                </Link>
+              </p>
+            ))}
+            {links.transfers.map((t) => (
+              <p key={t.id}>
+                Transfer — {t.status ?? "—"} to {t.to_number ?? "—"}
+                {t.reason ? ` — ${t.reason}` : ""}
+              </p>
+            ))}
+          </div>
         </Section>
       ) : null}
     </main>

@@ -346,6 +346,56 @@ export async function setBookingStatus(formData: FormData): Promise<void> {
   redirect(back);
 }
 
+// ── Portal access ────────────────────────────────────────────────────────
+// One email → one tenant. The Supabase auth user is intentionally NOT
+// deleted on removal — requirePortalTenant() re-checks this mapping on every
+// portal request, so deleting the row locks the user out immediately.
+
+export async function addPortalUser(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!tenantId) redirect("/admin");
+  const back = `/admin/tenants/${tenantId}`;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect(`${back}?perror=${encodeURIComponent("Enter a valid email address.")}`);
+  }
+
+  const { error } = await db()
+    .from("portal_users")
+    .insert({ tenant_id: tenantId, email });
+  if (error) {
+    const msg =
+      error.code === "23505"
+        ? "That email already has portal access."
+        : error.message.slice(0, 300);
+    console.error("addPortalUser failed", error);
+    redirect(`${back}?perror=${encodeURIComponent(msg)}`);
+  }
+  revalidatePath(back, "layout");
+  redirect(`${back}?saved=1`);
+}
+
+export async function removePortalUser(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const portalUserId = String(formData.get("portal_user_id") ?? "");
+  if (!tenantId || !portalUserId) redirect("/admin");
+  const back = `/admin/tenants/${tenantId}`;
+
+  const { error } = await db()
+    .from("portal_users")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("id", portalUserId);
+  if (error) {
+    console.error("removePortalUser failed", error);
+    redirect(`${back}?perror=${encodeURIComponent(error.message.slice(0, 300))}`);
+  }
+  revalidatePath(back, "layout");
+  redirect(back);
+}
+
 export async function setTenantStatus(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");

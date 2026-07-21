@@ -275,6 +275,23 @@ export async function recentLeads(tenantId: string, page = 1): Promise<Paged<Lea
   return paginate((data ?? []) as LeadRow[], page);
 }
 
+export interface PortalUserRow {
+  id: string;
+  email: string;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export async function listPortalUsers(tenantId: string): Promise<PortalUserRow[]> {
+  const { data, error } = await db()
+    .from("portal_users")
+    .select("id, email, created_at, last_login_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PortalUserRow[];
+}
+
 export interface BookingRow {
   id: string;
   type: string | null;

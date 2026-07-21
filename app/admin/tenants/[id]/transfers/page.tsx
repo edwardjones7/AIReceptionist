@@ -1,7 +1,9 @@
-import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { recentTransfers } from "@/lib/admin-queries";
-import { styles, fmtDate, Pager, pageParam } from "../../../ui";
+import { pageParam } from "@/lib/format";
+import { Card } from "@/components/ui/card";
+import { TransfersTable } from "@/components/records/tables";
+import { Pager } from "@/components/records/pager";
 
 export const dynamic = "force-dynamic";
 
@@ -19,52 +21,17 @@ export default async function TenantTransfersPage({
 
   return (
     <main>
-      <h1 style={styles.h1}>Transfers</h1>
-      <p style={styles.dim}>
+      <h1 className="text-xl font-semibold">Transfers</h1>
+      <p className="text-sm text-muted-foreground">
         Live-transfer attempts and after-hours callbacks captured in their place.
       </p>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>When</th>
-            <th style={styles.th}>Status</th>
-            <th style={styles.th}>To</th>
-            <th style={styles.th}>Reason</th>
-            <th style={styles.th}>Call</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transfers.rows.map((t) => (
-            <tr key={t.id}>
-              <td style={{ ...styles.td, whiteSpace: "nowrap" }}>{fmtDate(t.ts)}</td>
-              <td style={styles.td}>{t.status ?? "—"}</td>
-              <td style={styles.td}>{t.to_number ?? "—"}</td>
-              <td style={{ ...styles.td, color: "#aaa", maxWidth: 420 }}>
-                {t.reason ?? t.summary ?? "—"}
-              </td>
-              <td style={styles.td}>
-                {t.call_id ? (
-                  <Link
-                    href={`/admin/tenants/${id}/calls/${t.call_id}`}
-                    style={styles.link}
-                  >
-                    view
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </td>
-            </tr>
-          ))}
-          {transfers.rows.length === 0 ? (
-            <tr>
-              <td style={styles.td} colSpan={5}>
-                No transfers {page > 1 ? "on this page" : "yet"}.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+      <Card className="mt-4 p-0">
+        <TransfersTable
+          rows={transfers.rows}
+          page={page}
+          callHrefBase={`/admin/tenants/${id}/calls`}
+        />
+      </Card>
       <Pager
         basePath={`/admin/tenants/${id}/transfers`}
         page={page}

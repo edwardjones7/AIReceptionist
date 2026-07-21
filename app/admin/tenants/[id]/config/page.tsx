@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getTenantRow } from "@/lib/admin-queries";
-import { styles, Section } from "../../../ui";
+import { Section } from "@/components/section";
 import ConfigEditor from "./editor";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +16,12 @@ export default async function TenantConfigPage({
   const row = await getTenantRow(id);
   if (!row) notFound();
 
-  const initialJson = row.config
-    ? JSON.stringify(row.config, null, 2)
-    : "";
+  const initialJson = row.config ? JSON.stringify(row.config, null, 2) : "";
 
   return (
     <main>
-      <h1 style={styles.h1}>Config — {row.name ?? id}</h1>
-      <p style={styles.dim}>
+      <h1 className="text-xl font-semibold">Config — {row.name ?? id}</h1>
+      <p className="text-sm text-muted-foreground">
         The full tenant config: knowledge, FAQ, voice, booking, transfer rules.
         Validated on save; live calls pick it up within ~60 seconds. Greeting or
         tool-enablement changes also need a re-provision (the assistant carries

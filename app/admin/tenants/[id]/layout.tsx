@@ -1,16 +1,8 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
-import { styles } from "../../ui";
 
-const TABS = [
-  ["", "Overview"],
-  ["/config", "Config"],
-  ["/calls", "Calls"],
-  ["/leads", "Leads"],
-  ["/bookings", "Bookings"],
-  ["/transfers", "Transfers"],
-] as const;
-
+// Tenant sub-nav lives in the sidebar (components/shell/app-sidebar.tsx);
+// this layout only adds the breadcrumb.
 export default async function TenantLayout({
   children,
   params,
@@ -21,20 +13,13 @@ export default async function TenantLayout({
   await requireAdmin();
   const { id } = await params;
   return (
-    <div style={styles.page}>
-      <p style={{ ...styles.faint, margin: 0 }}>
-        <Link href="/admin" style={styles.link}>
+    <div>
+      <p className="mb-4 text-xs text-muted-foreground/60">
+        <Link href="/admin" className="text-primary hover:underline">
           tenants
         </Link>{" "}
         / {id}
       </p>
-      <nav style={{ display: "flex", gap: 18, margin: "12px 0 4px", fontSize: 13 }}>
-        {TABS.map(([suffix, label]) => (
-          <Link key={suffix} href={`/admin/tenants/${id}${suffix}`} style={styles.link}>
-            {label}
-          </Link>
-        ))}
-      </nav>
       {children}
     </div>
   );

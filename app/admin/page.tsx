@@ -1,66 +1,94 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
-import { listTenants } from "@/lib/admin-queries";
-import { styles, Badge, fmtDate, fmtUsage } from "./ui";
+import { listTenantsWithStats, rangeParam } from "@/lib/analytics-queries";
+import { fmtCents, fmtDate } from "@/lib/format";
+import { RangeTabs } from "@/components/stats/range-tabs";
+import { StatusBadge } from "@/components/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
-export default async function TenantListPage() {
+export default async function TenantListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
   await requireAdmin();
-  const tenants = await listTenants();
+  const range = rangeParam((await searchParams).range);
+  const tenants = await listTenantsWithStats(range);
 
   return (
-    <main style={styles.page}>
-      <h1 style={styles.h1}>Tenants</h1>
-      <p style={styles.dim}>
-        Every business Scarlett answers for. Counts are the last 7 days.
-      </p>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Tenant</th>
-            <th style={styles.th}>Status</th>
-            <th style={styles.th}>Number</th>
-            <th style={styles.th}>Calls</th>
-            <th style={styles.th}>Leads</th>
-            <th style={styles.th}>This month</th>
-            <th style={styles.th}>Last call</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tenants.map((t) => (
-            <tr key={t.id}>
-              <td style={styles.td}>
-                <Link href={`/admin/tenants/${t.id}`} style={styles.link}>
-                  {t.name}
-                </Link>{" "}
-                <span style={styles.faint}>({t.id})</span>
-              </td>
-              <td style={styles.td}>
-                <Badge status={t.status} />
-              </td>
-              <td style={styles.td}>{t.phoneNumber ?? "—"}</td>
-              <td style={styles.td}>{t.callsLast7}</td>
-              <td style={styles.td}>{t.leadsLast7}</td>
-              <td style={{ ...styles.td, whiteSpace: "nowrap" }}>
-                {fmtUsage(t.callsMtd, t.secondsMtd, t.costCentsMtd)}
-              </td>
-              <td style={styles.td}>{fmtDate(t.lastCallAt)}</td>
-            </tr>
-          ))}
-          {tenants.length === 0 ? (
-            <tr>
-              <td style={styles.td} colSpan={7}>
-                No tenants yet. Seed one with <code>npm run seed -- elenos</code> or{" "}
-                <Link href="/admin/tenants/new" style={styles.link}>
-                  create one
-                </Link>
-                .
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+    <main>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Tenants</h1>
+          <p className="text-sm text-muted-foreground">
+            Every business Scarlett answers for.
+          </p>
+        </div>
+        <RangeTabs basePath="/admin" current={range} />
+      </div>
+      <Card className="mt-5 p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tenant</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Number</TableHead>
+              <TableHead className="text-right">Calls</TableHead>
+              <TableHead className="text-right">Minutes</TableHead>
+              <TableHead className="text-right">Leads</TableHead>
+              <TableHead className="text-right">Bookings</TableHead>
+              <TableHead className="text-right">Vapi cost</TableHead>
+              <TableHead>Last call</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tenants.map((t) => (
+              <TableRow key={t.id}>
+                <TableCell>
+                  <Link
+                    href={`/admin/tenants/${t.id}`}
+                    className="text-primary hover:underline"
+                  >
+                    {t.name}
+                  </Link>{" "}
+                  <span className="text-xs text-muted-foreground/60">({t.id})</span>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={t.status} />
+                </TableCell>
+                <TableCell>{t.phoneNumber ?? "—"}</TableCell>
+                <TableCell className="text-right">{t.calls}</TableCell>
+                <TableCell className="text-right">{Math.round(t.seconds / 60)}</TableCell>
+                <TableCell className="text-right">{t.leads}</TableCell>
+                <TableCell className="text-right">{t.bookings}</TableCell>
+                <TableCell className="text-right">{fmtCents(t.costCents)}</TableCell>
+                <TableCell className="whitespace-nowrap">{fmtDate(t.lastCallAt)}</TableCell>
+              </TableRow>
+            ))}
+            {tenants.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-muted-foreground">
+                  No tenants yet. Seed one with <code>npm run seed -- elenos</code> or{" "}
+                  <Link href="/admin/tenants/new" className="text-primary hover:underline">
+                    create one
+                  </Link>
+                  .
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </Card>
     </main>
   );
 }

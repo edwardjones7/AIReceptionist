@@ -1,24 +1,22 @@
 "use client";
 
-// The one client component in the admin: a submit button that asks for
-// confirmation before letting the form action fire. Used on destructive
-// actions (deprovision, delete tenant).
-
-import type { CSSProperties, ReactNode } from "react";
+// Submit button that asks for confirmation before letting the form action
+// fire. Used on destructive actions (deprovision, delete tenant, remove
+// portal user).
 
 export function ConfirmSubmit({
   message,
-  style,
+  className,
   children,
 }: {
   message: string;
-  style?: CSSProperties;
-  children: ReactNode;
+  className?: string;
+  children: React.ReactNode;
 }) {
   return (
     <button
       type="submit"
-      style={style}
+      className={className}
       onClick={(e) => {
         if (!window.confirm(message)) e.preventDefault();
       }}

@@ -30,6 +30,8 @@ export const env = {
   // Supabase
   supabaseUrl: () => required("SUPABASE_URL"),
   supabaseServiceRoleKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),
+  // Publishable key — used only server-side for portal magic-link auth.
+  supabaseAnonKey: () => required("SUPABASE_ANON_KEY"),
 
   // Google Calendar
   googleClientEmail: () => required("GOOGLE_CLIENT_EMAIL"),

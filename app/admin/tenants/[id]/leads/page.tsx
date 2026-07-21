@@ -1,7 +1,11 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { recentLeads } from "@/lib/admin-queries";
+import { pageParam } from "@/lib/format";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { LeadsTable } from "@/components/records/tables";
+import { Pager } from "@/components/records/pager";
 import { setLeadStatus } from "../../../actions";
-import { styles, fmtDate, Pager, pageParam } from "../../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -23,73 +27,35 @@ export default async function TenantLeadsPage({
 
   return (
     <main>
-      <h1 style={styles.h1}>Leads</h1>
-      {sp.perror ? (
-        <p style={{ color: "#ef4444", fontSize: 13 }}>{sp.perror}</p>
-      ) : null}
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>When</th>
-            <th style={styles.th}>Name</th>
-            <th style={styles.th}>Contact</th>
-            <th style={styles.th}>Intent</th>
-            <th style={styles.th}>Details</th>
-            <th style={styles.th}>Qualified</th>
-            <th style={styles.th}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leads.rows.map((l) => (
-            <tr key={l.id}>
-              <td style={{ ...styles.td, whiteSpace: "nowrap" }}>{fmtDate(l.created_at)}</td>
-              <td style={styles.td}>{l.name || "—"}</td>
-              <td style={styles.td}>
-                {[l.phone, l.email].filter(Boolean).join(" · ") || "—"}
-              </td>
-              <td style={styles.td}>{l.intent ?? "—"}</td>
-              <td style={{ ...styles.td, color: "#aaa", maxWidth: 380 }}>
-                {l.details ?? "—"}
-              </td>
-              <td style={styles.td}>{l.qualified ? "🔥 yes" : "no"}</td>
-              <td style={{ ...styles.td, whiteSpace: "nowrap" }}>
-                <form
-                  action={setLeadStatus}
-                  style={{ display: "flex", gap: 6, alignItems: "center" }}
-                >
-                  <input type="hidden" name="tenant_id" value={id} />
-                  <input type="hidden" name="lead_id" value={l.id} />
-                  <input type="hidden" name="back" value={back} />
-                  <select
-                    name="status"
-                    defaultValue={l.status ?? "new"}
-                    style={{ ...styles.input, width: "auto", padding: "4px 6px" }}
-                  >
-                    {LEAD_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    style={{ ...styles.buttonGhost, padding: "4px 10px" }}
-                  >
-                    Set
-                  </button>
-                </form>
-              </td>
-            </tr>
-          ))}
-          {leads.rows.length === 0 ? (
-            <tr>
-              <td style={styles.td} colSpan={7}>
-                No leads {page > 1 ? "on this page" : "yet"}.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+      <h1 className="text-xl font-semibold">Leads</h1>
+      {sp.perror ? <p className="mt-2 text-sm text-destructive">{sp.perror}</p> : null}
+      <Card className="mt-4 p-0">
+        <LeadsTable
+          rows={leads.rows}
+          page={page}
+          actionSlot={(l) => (
+            <form action={setLeadStatus} className="flex items-center gap-1.5">
+              <input type="hidden" name="tenant_id" value={id} />
+              <input type="hidden" name="lead_id" value={l.id} />
+              <input type="hidden" name="back" value={back} />
+              <select
+                name="status"
+                defaultValue={l.status ?? "new"}
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+              >
+                {LEAD_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <Button type="submit" variant="outline" size="sm" className="h-7 px-2 text-xs">
+                Set
+              </Button>
+            </form>
+          )}
+        />
+      </Card>
       <Pager
         basePath={`/admin/tenants/${id}/leads`}
         page={page}

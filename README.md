@@ -282,8 +282,17 @@ All env access goes through `lib/env.ts` — don't read `process.env` directly.
 
 **First-time setup, in order:**
 
-1. **Supabase** — create a project, run `supabase/schema.sql` in the SQL editor, copy the
-   URL and **service-role** key.
+1. **Supabase** — create a project, run `supabase/schema.sql` in the SQL editor
+   (existing installs: run `supabase/migrations/` in order instead — 0003 adds the
+   analytics RPCs the dashboards require, 0004 adds `portal_users`), copy the URL, the
+   **service-role** key, and the **anon** key (`SUPABASE_ANON_KEY`, portal auth only).
+   For the client portal, also configure Auth: **Authentication → URL Configuration** —
+   Site URL = your `PUBLIC_BASE_URL`, and add
+   `<PUBLIC_BASE_URL>/portal/auth/confirm` + `http://localhost:3000/portal/auth/confirm`
+   to the redirect allowlist. Edit the **Magic Link email template** to link to
+   `{{ .SiteURL }}/portal/auth/confirm?token_hash={{ .TokenHash }}&type=email`.
+   Built-in SMTP is rate-limited to a few emails an hour — wire custom SMTP before
+   giving clients access at any volume.
 2. **Google Calendar** — create a project, enable the Calendar API, create a service
    account, download its JSON key. Share the founder's calendar with the service-account
    email ("Make changes to events"), and set `GOOGLE_CALENDAR_ID` to that calendar.
@@ -320,6 +329,10 @@ All env access goes through `lib/env.ts` — don't read `process.env` directly.
    calls, leads, and the calendar on request.
 7. **Replicate.** `/admin` → New tenant → trades template → preflight → provision — a
    new assistant and number, no code changes, no deploys.
+8. **Client portal.** On the tenant page, grant portal access to an email under
+   "Portal access". Sign in at `/portal` with that email's magic link — the client sees
+   stats, trend charts (7d–all-time), calls with summaries and transcripts, leads,
+   bookings, and transfers for their tenant only. Vapi cost never appears in the portal.
 
 Run `npm run typecheck` before deploying.
 

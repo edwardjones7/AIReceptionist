@@ -1,7 +1,8 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { templateIds } from "@/lib/templates";
+import { Button } from "@/components/ui/button";
+import { Field, Section } from "@/components/section";
 import { createTenant } from "../../actions";
-import { styles, Field, Section } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +23,15 @@ export default async function NewTenantPage({
   const { error } = await searchParams;
 
   return (
-    <main style={styles.page}>
-      <h1 style={styles.h1}>New tenant</h1>
-      <p style={styles.dim}>
+    <main>
+      <h1 className="text-xl font-semibold">New tenant</h1>
+      <p className="text-sm text-muted-foreground">
         Creates the tenant as a draft from a template config. Review the
         generated config, then provision from the tenant page — that&apos;s when
         the Vapi assistant and phone number are created.
       </p>
       {error ? (
-        <p style={{ color: "#ef4444", fontSize: 13 }}>
+        <p className="mt-2 text-sm text-destructive">
           {ERRORS[error] ?? "Something went wrong."}
         </p>
       ) : null}
@@ -41,16 +42,26 @@ export default async function NewTenantPage({
           <Field label="Business name" name="display_name" placeholder="Sullivan Electric" />
           <Field label="Agent name" name="agent_name" defaultValue="Scarlett" />
           <Field label="Timezone" name="timezone" defaultValue="America/New_York" />
-          <label style={styles.label} htmlFor="template">
-            Template
-          </label>
-          <select id="template" name="template" style={styles.input} defaultValue="elenos">
-            {templateIds().map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <div className="mt-3">
+            <label
+              className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-muted-foreground"
+              htmlFor="template"
+            >
+              Template
+            </label>
+            <select
+              id="template"
+              name="template"
+              defaultValue="elenos"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              {templateIds().map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
           <Field
             label="Voice id (Vapi voice; blank = Savannah)"
             name="voice_id"
@@ -78,9 +89,9 @@ export default async function NewTenantPage({
           />
         </Section>
 
-        <button type="submit" style={styles.button}>
+        <Button type="submit" className="mt-5">
           Create draft tenant
-        </button>
+        </Button>
       </form>
     </main>
   );

@@ -128,6 +128,130 @@ from tenants t
 left join calls c on c.tenant_id = t.id
 group by t.id;
 
+-- ── portal_users — client-portal login emails, one tenant each ────────────
+-- Managed from /admin; checked on every portal request, so deleting a row
+-- locks the user out immediately even with a live Supabase Auth session.
+create table if not exists portal_users (
+  id            uuid primary key default gen_random_uuid(),
+  tenant_id     text not null references tenants(id) on delete cascade,
+  email         text not null,
+  created_at    timestamptz not null default now(),
+  last_login_at timestamptz
+);
+create unique index if not exists portal_users_email_uidx on portal_users(lower(email));
+create index if not exists portal_users_tenant_idx on portal_users(tenant_id);
+alter table portal_users enable row level security;
+
+-- ── analytics RPCs — range-scoped totals + zero-filled series ─────────────
+-- Called only by the backend (service role) via db().rpc(...). UTC buckets.
+
+create or replace function tenant_activity_series(
+  p_tenant_id text,
+  p_start     timestamptz,
+  p_bucket    text
+) returns table (
+  bucket     timestamptz,
+  calls      bigint,
+  seconds    bigint,
+  leads      bigint,
+  bookings   bigint,
+  cost_cents bigint
+)
+language plpgsql stable as $$
+begin
+  if p_bucket not in ('day', 'week', 'month') then
+    raise exception 'bad bucket %', p_bucket;
+  end if;
+  return query
+  with bounds as (
+    select
+      date_trunc(p_bucket, coalesce(
+        p_start,
+        (select min(c.created_at) from calls c where c.tenant_id = p_tenant_id),
+        now()
+      )) as start_at,
+      date_trunc(p_bucket, now()) as end_at
+  ),
+  s as (
+    select generate_series(
+      (select start_at from bounds),
+      (select end_at from bounds),
+      ('1 ' || p_bucket)::interval
+    ) as bucket
+  )
+  select
+    s.bucket,
+    count(c.id),
+    coalesce(sum(c.duration_sec), 0)::bigint,
+    (select count(*) from leads l
+      where l.tenant_id = p_tenant_id
+        and date_trunc(p_bucket, l.created_at) = s.bucket),
+    (select count(*) from bookings b
+      where b.tenant_id = p_tenant_id
+        and date_trunc(p_bucket, b.created_at) = s.bucket),
+    coalesce(sum(c.cost_cents), 0)::bigint
+  from s
+  left join calls c
+    on c.tenant_id = p_tenant_id
+   and date_trunc(p_bucket, c.created_at) = s.bucket
+  group by s.bucket
+  order by s.bucket;
+end $$;
+
+create or replace function tenant_range_stats(
+  p_tenant_id text,
+  p_start     timestamptz
+) returns table (
+  calls        bigint,
+  seconds      bigint,
+  cost_cents   bigint,
+  leads        bigint,
+  bookings     bigint,
+  transfers    bigint,
+  last_call_at timestamptz
+)
+language sql stable as $$
+  select
+    (select count(*)                      from calls     where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
+    (select coalesce(sum(duration_sec),0) from calls     where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
+    (select coalesce(sum(cost_cents),0)   from calls     where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
+    (select count(*)                      from leads     where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
+    (select count(*)                      from bookings  where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
+    (select count(*)                      from transfers where tenant_id = p_tenant_id and (p_start is null or ts >= p_start)),
+    (select max(created_at)               from calls     where tenant_id = p_tenant_id);
+$$;
+
+create or replace function tenants_range_stats(
+  p_start timestamptz
+) returns table (
+  tenant_id    text,
+  calls        bigint,
+  seconds      bigint,
+  cost_cents   bigint,
+  leads        bigint,
+  bookings     bigint,
+  last_call_at timestamptz
+)
+language sql stable as $$
+  select
+    t.id,
+    count(c.id) filter (where p_start is null or c.created_at >= p_start),
+    coalesce(sum(c.duration_sec) filter (where p_start is null or c.created_at >= p_start), 0)::bigint,
+    coalesce(sum(c.cost_cents)   filter (where p_start is null or c.created_at >= p_start), 0)::bigint,
+    (select count(*) from leads l
+      where l.tenant_id = t.id and (p_start is null or l.created_at >= p_start)),
+    (select count(*) from bookings b
+      where b.tenant_id = t.id and (p_start is null or b.created_at >= p_start)),
+    max(c.created_at)
+  from tenants t
+  left join calls c on c.tenant_id = t.id
+  group by t.id;
+$$;
+
+revoke execute on function tenant_activity_series(text, timestamptz, text) from public, anon, authenticated;
+revoke execute on function tenant_range_stats(text, timestamptz)           from public, anon, authenticated;
+revoke execute on function tenants_range_stats(timestamptz)                from public, anon, authenticated;
+
 -- ── RLS: lock everything down; service role bypasses RLS. ─────────────────
 alter table tenants     enable row level security;
 alter table calls       enable row level security;
