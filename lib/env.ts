@@ -34,8 +34,9 @@ export const env = {
   supabaseAnonKey: () => required("SUPABASE_ANON_KEY"),
   // Postgres schema the Scarlett data tables live in. "public" for a
   // standalone project; set to "scarlett" when co-locating in the Elenos
-  // database so its tables never mix with the CRM/portal tables.
-  supabaseSchema: optional("SUPABASE_DB_SCHEMA", "public"),
+  // database so its tables never mix with the CRM/portal tables. Lazy (a
+  // getter) so tsx scripts that load .env.local after imports still see it.
+  supabaseSchema: () => optional("SUPABASE_DB_SCHEMA", "public"),
 
   // Google Calendar
   googleClientEmail: () => required("GOOGLE_CLIENT_EMAIL"),

@@ -14,7 +14,7 @@ export function db(): SupabaseClient {
     // is scoped here, so co-locating in the Elenos DB is one env-var flip. The
     // cast keeps the client's TS generic at the default — the schema is a
     // runtime value and rows are untyped here, so this only affects typing.
-    db: { schema: env.supabaseSchema as "public" },
+    db: { schema: env.supabaseSchema() as "public" },
   });
   return client;
 }
