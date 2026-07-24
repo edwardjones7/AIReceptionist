@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { portalLogout } from "./actions";
 
 export const metadata = { title: "Scarlett — Portal" };
+export const dynamic = "force-dynamic";
 
 export default async function PortalLayout({
   children,

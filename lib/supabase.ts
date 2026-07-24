@@ -10,6 +10,11 @@ export function db(): SupabaseClient {
   if (client) return client;
   client = createClient(env.supabaseUrl(), env.supabaseServiceRoleKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Data lives in this schema (default "public"). Every .from()/.rpc() call
+    // is scoped here, so co-locating in the Elenos DB is one env-var flip. The
+    // cast keeps the client's TS generic at the default — the schema is a
+    // runtime value and rows are untyped here, so this only affects typing.
+    db: { schema: env.supabaseSchema as "public" },
   });
   return client;
 }
