@@ -15,22 +15,27 @@ import type { Bucket } from "@/lib/analytics-queries";
 import { bucketTickFormatter } from "./activity-charts";
 
 const config = {
-  cost: { label: "Cost", color: "var(--chart-5)" },
+  vapi: { label: "Vapi", color: "var(--chart-5)" },
+  llm: { label: "LLM", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 export function CostChart({
   series,
   bucket,
 }: {
-  series: { bucket: string; costCents: number }[];
+  series: { bucket: string; costCents: number; llmCostCents: number }[];
   bucket: Bucket;
 }) {
   const tick = bucketTickFormatter(bucket);
-  const data = series.map((p) => ({ bucket: p.bucket, cost: p.costCents / 100 }));
+  const data = series.map((p) => ({
+    bucket: p.bucket,
+    vapi: p.costCents / 100,
+    llm: p.llmCostCents / 100,
+  }));
   return (
     <Card className="gap-3 p-4">
       <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-        Vapi cost
+        Cost — Vapi + LLM
       </p>
       <ChartContainer config={config} className="h-40 w-full">
         <BarChart data={data} margin={{ left: -14 }}>
@@ -45,7 +50,8 @@ export function CostChart({
               />
             }
           />
-          <Bar dataKey="cost" fill="var(--color-cost)" radius={3} />
+          <Bar dataKey="vapi" stackId="c" fill="var(--color-vapi)" radius={[0, 0, 3, 3]} />
+          <Bar dataKey="llm" stackId="c" fill="var(--color-llm)" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ChartContainer>
     </Card>

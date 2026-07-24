@@ -23,14 +23,18 @@ export function StatCards({
   bookings,
   transfers,
   costCents,
+  llmCostCents,
 }: {
   calls: number;
   seconds: number;
   leads: number;
   bookings: number;
   transfers: number;
+  // Cost props are admin-only — the portal omits them entirely.
   costCents?: number;
+  llmCostCents?: number;
 }) {
+  const showCost = costCents !== undefined;
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
       <StatCard label="Calls" value={String(calls)} />
@@ -38,8 +42,16 @@ export function StatCards({
       <StatCard label="Leads" value={String(leads)} />
       <StatCard label="Bookings" value={String(bookings)} />
       <StatCard label="Transfers" value={String(transfers)} />
-      {costCents !== undefined ? (
-        <StatCard label="Vapi cost" value={fmtCents(costCents)} />
+      {showCost ? (
+        <>
+          <StatCard label="Vapi cost" value={fmtCents(costCents!)} />
+          <StatCard label="LLM cost" value={fmtCents(llmCostCents ?? 0)} />
+          <StatCard
+            label="Total cost"
+            value={fmtCents(costCents! + (llmCostCents ?? 0))}
+            sub="Vapi + Anthropic"
+          />
+        </>
       ) : null}
     </div>
   );

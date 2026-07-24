@@ -139,18 +139,25 @@ export default async function TenantOverviewPage({
           bookings={stats.bookings}
           transfers={stats.transfers}
           costCents={stats.costCents}
+          llmCostCents={stats.llmCostCents}
         />
         <ActivityCharts
-          series={series.map(({ costCents: _cost, ...p }) => p)}
+          series={series.map(({ costCents: _c, llmCostCents: _l, ...p }) => p)}
           bucket={rangeBucket(range)}
         />
         <CostChart
-          series={series.map((p) => ({ bucket: p.bucket, costCents: p.costCents }))}
+          series={series.map((p) => ({
+            bucket: p.bucket,
+            costCents: p.costCents,
+            llmCostCents: p.llmCostCents,
+          }))}
           bucket={rangeBucket(range)}
         />
         <p className="text-xs text-muted-foreground/60">
-          Buckets and range boundaries are UTC. Cost is Vapi&apos;s per-call charge,
-          not what you bill the client. Last call {fmtDate(stats.lastCallAt)}.
+          Buckets and range boundaries are UTC. Vapi cost is telephony; LLM cost
+          is the estimated Anthropic token spend (Haiku turns + Sonnet summary) —
+          both are your cost, not what you bill the client. Last call{" "}
+          {fmtDate(stats.lastCallAt)}.
         </p>
       </div>
 

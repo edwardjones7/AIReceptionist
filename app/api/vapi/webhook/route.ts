@@ -11,6 +11,7 @@ import { resolveTenant } from "@/lib/context";
 import { anthropic } from "@/lib/anthropic";
 import { db, upsertCallByVapiId } from "@/lib/supabase";
 import { postDiscord } from "@/lib/notify";
+import { recordLlmUsage, type LlmUsage } from "@/lib/llm-cost";
 import type { TenantConfig } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -42,6 +43,7 @@ interface VapiWebhookBody {
 interface CallSummary {
   summary: string;
   outcome: "booked" | "lead" | "transferred" | "answered" | "missed";
+  usage?: LlmUsage;
 }
 
 async function summarize(
@@ -79,11 +81,17 @@ async function summarize(
         },
       },
     });
+    const usage: LlmUsage = {
+      inputTokens: res.usage.input_tokens ?? 0,
+      outputTokens: res.usage.output_tokens ?? 0,
+      cacheReadTokens: res.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: res.usage.cache_creation_input_tokens ?? 0,
+    };
     const text = res.content.find((b) => b.type === "text");
     if (text && text.type === "text") {
-      return JSON.parse(text.text) as CallSummary;
+      return { ...(JSON.parse(text.text) as CallSummary), usage };
     }
-    return fallback;
+    return { ...fallback, usage };
   } catch (e) {
     console.error("summarize failed", e);
     return fallback;
@@ -113,7 +121,18 @@ export async function POST(req: NextRequest) {
   const tenant = resolved.config;
 
   const transcript = msg.artifact?.transcript ?? msg.transcript ?? "";
-  const { summary, outcome } = await summarize(transcript, tenant);
+  const { summary, outcome, usage: summaryUsage } = await summarize(transcript, tenant);
+
+  // Record the Sonnet summary's token cost (best-effort).
+  if (summaryUsage) {
+    await recordLlmUsage({
+      tenantId: tenant.id,
+      vapiCallId,
+      model: env.summaryModel,
+      kind: "summary",
+      usage: summaryUsage,
+    });
+  }
 
   const recordingUrl = msg.recordingUrl ?? msg.artifact?.recordingUrl ?? null;
   const costCents =

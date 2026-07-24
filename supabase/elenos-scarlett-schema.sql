@@ -116,6 +116,25 @@ create table if not exists scarlett.transfers (
 );
 create index if not exists transfers_tenant_idx on scarlett.transfers(tenant_id, ts desc);
 
+-- ── llm_usage — per-turn Anthropic token cost (live turns + summary) ──────
+create table if not exists scarlett.llm_usage (
+  id                 uuid primary key default gen_random_uuid(),
+  tenant_id          text not null references scarlett.tenants(id) on delete cascade,
+  call_id            uuid references scarlett.calls(id) on delete set null,
+  vapi_call_id       text,
+  model              text not null,
+  kind               text not null,            -- 'live' | 'summary'
+  input_tokens       integer not null default 0,
+  output_tokens      integer not null default 0,
+  cache_read_tokens  integer not null default 0,
+  cache_write_tokens integer not null default 0,
+  cost_cents         numeric not null default 0,
+  ts                 timestamptz not null default now()
+);
+create index if not exists llm_usage_tenant_idx on scarlett.llm_usage(tenant_id, ts desc);
+create index if not exists llm_usage_vapi_idx on scarlett.llm_usage(vapi_call_id);
+alter table scarlett.llm_usage enable row level security;
+
 -- ── portal_users — client-portal login emails, one tenant each ────────────
 create table if not exists scarlett.portal_users (
   id            uuid primary key default gen_random_uuid(),
@@ -154,12 +173,13 @@ create or replace function scarlett.tenant_activity_series(
   p_start     timestamptz,
   p_bucket    text
 ) returns table (
-  bucket     timestamptz,
-  calls      bigint,
-  seconds    bigint,
-  leads      bigint,
-  bookings   bigint,
-  cost_cents bigint
+  bucket         timestamptz,
+  calls          bigint,
+  seconds        bigint,
+  leads          bigint,
+  bookings       bigint,
+  cost_cents     bigint,
+  llm_cost_cents numeric
 )
 language plpgsql stable
 set search_path = scarlett
@@ -195,7 +215,10 @@ begin
     (select count(*) from bookings b
       where b.tenant_id = p_tenant_id
         and date_trunc(p_bucket, b.created_at) = s.bucket),
-    coalesce(sum(c.cost_cents), 0)::bigint
+    coalesce(sum(c.cost_cents), 0)::bigint,
+    (select coalesce(sum(lu.cost_cents), 0) from llm_usage lu
+      where lu.tenant_id = p_tenant_id
+        and date_trunc(p_bucket, lu.ts) = s.bucket)
   from s
   left join calls c
     on c.tenant_id = p_tenant_id
@@ -208,13 +231,14 @@ create or replace function scarlett.tenant_range_stats(
   p_tenant_id text,
   p_start     timestamptz
 ) returns table (
-  calls        bigint,
-  seconds      bigint,
-  cost_cents   bigint,
-  leads        bigint,
-  bookings     bigint,
-  transfers    bigint,
-  last_call_at timestamptz
+  calls          bigint,
+  seconds        bigint,
+  cost_cents     bigint,
+  leads          bigint,
+  bookings       bigint,
+  transfers      bigint,
+  llm_cost_cents numeric,
+  last_call_at   timestamptz
 )
 language sql stable
 set search_path = scarlett
@@ -226,19 +250,21 @@ as $$
     (select count(*)                      from leads     where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
     (select count(*)                      from bookings  where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
     (select count(*)                      from transfers where tenant_id = p_tenant_id and (p_start is null or ts >= p_start)),
+    (select coalesce(sum(cost_cents),0)   from llm_usage where tenant_id = p_tenant_id and (p_start is null or ts >= p_start)),
     (select max(created_at)               from calls     where tenant_id = p_tenant_id);
 $$;
 
 create or replace function scarlett.tenants_range_stats(
   p_start timestamptz
 ) returns table (
-  tenant_id    text,
-  calls        bigint,
-  seconds      bigint,
-  cost_cents   bigint,
-  leads        bigint,
-  bookings     bigint,
-  last_call_at timestamptz
+  tenant_id      text,
+  calls          bigint,
+  seconds        bigint,
+  cost_cents     bigint,
+  leads          bigint,
+  bookings       bigint,
+  llm_cost_cents numeric,
+  last_call_at   timestamptz
 )
 language sql stable
 set search_path = scarlett
@@ -252,6 +278,8 @@ as $$
       where l.tenant_id = t.id and (p_start is null or l.created_at >= p_start)),
     (select count(*) from bookings b
       where b.tenant_id = t.id and (p_start is null or b.created_at >= p_start)),
+    (select coalesce(sum(lu.cost_cents), 0) from llm_usage lu
+      where lu.tenant_id = t.id and (p_start is null or lu.ts >= p_start)),
     max(c.created_at)
   from tenants t
   left join calls c on c.tenant_id = t.id

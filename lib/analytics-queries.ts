@@ -48,6 +48,7 @@ export interface SeriesPoint {
   leads: number;
   bookings: number;
   costCents: number;
+  llmCostCents: number;
 }
 
 interface SeriesRow {
@@ -57,6 +58,7 @@ interface SeriesRow {
   leads: number;
   bookings: number;
   cost_cents: number;
+  llm_cost_cents: number;
 }
 
 export async function getTenantSeries(
@@ -76,6 +78,7 @@ export async function getTenantSeries(
     leads: Number(r.leads),
     bookings: Number(r.bookings),
     costCents: Number(r.cost_cents),
+    llmCostCents: Number(r.llm_cost_cents ?? 0),
   }));
 }
 
@@ -86,6 +89,7 @@ export interface RangeStats {
   leads: number;
   bookings: number;
   transfers: number;
+  llmCostCents: number;
   lastCallAt: string | null;
 }
 
@@ -96,6 +100,7 @@ interface RangeStatsRow {
   leads: number;
   bookings: number;
   transfers: number;
+  llm_cost_cents: number;
   last_call_at: string | null;
 }
 
@@ -116,6 +121,7 @@ export async function getTenantRangeStats(
     leads: Number(row?.leads ?? 0),
     bookings: Number(row?.bookings ?? 0),
     transfers: Number(row?.transfers ?? 0),
+    llmCostCents: Number(row?.llm_cost_cents ?? 0),
     lastCallAt: row?.last_call_at ?? null,
   };
 }
@@ -130,6 +136,7 @@ export interface TenantWithStats {
   costCents: number;
   leads: number;
   bookings: number;
+  llmCostCents: number;
   lastCallAt: string | null;
 }
 
@@ -140,6 +147,7 @@ interface TenantsStatsRow {
   cost_cents: number;
   leads: number;
   bookings: number;
+  llm_cost_cents: number;
   last_call_at: string | null;
 }
 
@@ -174,6 +182,7 @@ export async function listTenantsWithStats(
       costCents: Number(s?.cost_cents ?? 0),
       leads: Number(s?.leads ?? 0),
       bookings: Number(s?.bookings ?? 0),
+      llmCostCents: Number(s?.llm_cost_cents ?? 0),
       lastCallAt: s?.last_call_at ?? null,
     };
   });

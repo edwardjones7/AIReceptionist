@@ -5,6 +5,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env";
+import { recordLlmUsage } from "./llm-cost";
 import type { ToolDef } from "./tools";
 
 let client: Anthropic | null = null;
@@ -124,6 +125,9 @@ export function streamClaudeAsOpenAI(opts: {
   systemVolatile: string; // not cached (current time, caller id)
   messages: Anthropic.MessageParam[];
   tools: Anthropic.Tool[];
+  // For per-turn LLM cost accounting. Best-effort; omit to skip.
+  tenantId?: string;
+  vapiCallId?: string | null;
 }): ReadableStream<Uint8Array> {
   const id = `chatcmpl-${Math.round(Date.now() / 1000)}-${Math.floor(
     Math.random() * 1e6,
@@ -142,6 +146,11 @@ export function streamClaudeAsOpenAI(opts: {
     async start(controller) {
       let toolIndex = -1;
       let sawToolUse = false;
+      // Token usage for this turn, read off the raw stream events.
+      let inTok = 0;
+      let outTok = 0;
+      let cacheRead = 0;
+      let cacheWrite = 0;
       try {
         const stream = anthropic().messages.stream({
           model: opts.model,
@@ -162,7 +171,14 @@ export function streamClaudeAsOpenAI(opts: {
         controller.enqueue(enc.encode(sseChunk(base({ role: "assistant" }, null))));
 
         for await (const event of stream) {
-          if (event.type === "content_block_start") {
+          if (event.type === "message_start") {
+            const u = event.message.usage;
+            inTok = u.input_tokens ?? 0;
+            cacheRead = u.cache_read_input_tokens ?? 0;
+            cacheWrite = u.cache_creation_input_tokens ?? 0;
+          } else if (event.type === "message_delta") {
+            outTok = event.usage.output_tokens ?? outTok;
+          } else if (event.type === "content_block_start") {
             if (event.content_block.type === "tool_use") {
               sawToolUse = true;
               toolIndex += 1;
@@ -222,6 +238,23 @@ export function streamClaudeAsOpenAI(opts: {
           ),
         );
         controller.enqueue(enc.encode("data: [DONE]\n\n"));
+
+        // Record this turn's cost off the call path — not awaited, so it never
+        // delays closing the stream, and it can't throw into the response.
+        if (opts.tenantId) {
+          void recordLlmUsage({
+            tenantId: opts.tenantId,
+            vapiCallId: opts.vapiCallId ?? null,
+            model: opts.model,
+            kind: "live",
+            usage: {
+              inputTokens: inTok,
+              outputTokens: outTok,
+              cacheReadTokens: cacheRead,
+              cacheWriteTokens: cacheWrite,
+            },
+          });
+        }
       } catch (e) {
         console.error("streamClaudeAsOpenAI error", e);
         // Emit a graceful spoken fallback rather than dropping the call.

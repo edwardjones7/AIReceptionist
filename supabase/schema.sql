@@ -128,6 +128,26 @@ from tenants t
 left join calls c on c.tenant_id = t.id
 group by t.id;
 
+-- ── llm_usage — per-turn Anthropic token cost (live turns + summary) ──────
+-- The analytics functions below fold sum(cost_cents) in as llm_cost_cents.
+create table if not exists llm_usage (
+  id                 uuid primary key default gen_random_uuid(),
+  tenant_id          text not null references tenants(id) on delete cascade,
+  call_id            uuid references calls(id) on delete set null,
+  vapi_call_id       text,
+  model              text not null,
+  kind               text not null,            -- 'live' | 'summary'
+  input_tokens       integer not null default 0,
+  output_tokens      integer not null default 0,
+  cache_read_tokens  integer not null default 0,
+  cache_write_tokens integer not null default 0,
+  cost_cents         numeric not null default 0,
+  ts                 timestamptz not null default now()
+);
+create index if not exists llm_usage_tenant_idx on llm_usage(tenant_id, ts desc);
+create index if not exists llm_usage_vapi_idx on llm_usage(vapi_call_id);
+alter table llm_usage enable row level security;
+
 -- ── portal_users — client-portal login emails, one tenant each ────────────
 -- Managed from /admin; checked on every portal request, so deleting a row
 -- locks the user out immediately even with a live Supabase Auth session.
@@ -150,12 +170,13 @@ create or replace function tenant_activity_series(
   p_start     timestamptz,
   p_bucket    text
 ) returns table (
-  bucket     timestamptz,
-  calls      bigint,
-  seconds    bigint,
-  leads      bigint,
-  bookings   bigint,
-  cost_cents bigint
+  bucket         timestamptz,
+  calls          bigint,
+  seconds        bigint,
+  leads          bigint,
+  bookings       bigint,
+  cost_cents     bigint,
+  llm_cost_cents numeric
 )
 language plpgsql stable as $$
 begin
@@ -189,7 +210,10 @@ begin
     (select count(*) from bookings b
       where b.tenant_id = p_tenant_id
         and date_trunc(p_bucket, b.created_at) = s.bucket),
-    coalesce(sum(c.cost_cents), 0)::bigint
+    coalesce(sum(c.cost_cents), 0)::bigint,
+    (select coalesce(sum(lu.cost_cents), 0) from llm_usage lu
+      where lu.tenant_id = p_tenant_id
+        and date_trunc(p_bucket, lu.ts) = s.bucket)
   from s
   left join calls c
     on c.tenant_id = p_tenant_id
@@ -202,13 +226,14 @@ create or replace function tenant_range_stats(
   p_tenant_id text,
   p_start     timestamptz
 ) returns table (
-  calls        bigint,
-  seconds      bigint,
-  cost_cents   bigint,
-  leads        bigint,
-  bookings     bigint,
-  transfers    bigint,
-  last_call_at timestamptz
+  calls          bigint,
+  seconds        bigint,
+  cost_cents     bigint,
+  leads          bigint,
+  bookings       bigint,
+  transfers      bigint,
+  llm_cost_cents numeric,
+  last_call_at   timestamptz
 )
 language sql stable as $$
   select
@@ -218,19 +243,21 @@ language sql stable as $$
     (select count(*)                      from leads     where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
     (select count(*)                      from bookings  where tenant_id = p_tenant_id and (p_start is null or created_at >= p_start)),
     (select count(*)                      from transfers where tenant_id = p_tenant_id and (p_start is null or ts >= p_start)),
+    (select coalesce(sum(cost_cents),0)   from llm_usage where tenant_id = p_tenant_id and (p_start is null or ts >= p_start)),
     (select max(created_at)               from calls     where tenant_id = p_tenant_id);
 $$;
 
 create or replace function tenants_range_stats(
   p_start timestamptz
 ) returns table (
-  tenant_id    text,
-  calls        bigint,
-  seconds      bigint,
-  cost_cents   bigint,
-  leads        bigint,
-  bookings     bigint,
-  last_call_at timestamptz
+  tenant_id      text,
+  calls          bigint,
+  seconds        bigint,
+  cost_cents     bigint,
+  leads          bigint,
+  bookings       bigint,
+  llm_cost_cents numeric,
+  last_call_at   timestamptz
 )
 language sql stable as $$
   select
@@ -242,6 +269,8 @@ language sql stable as $$
       where l.tenant_id = t.id and (p_start is null or l.created_at >= p_start)),
     (select count(*) from bookings b
       where b.tenant_id = t.id and (p_start is null or b.created_at >= p_start)),
+    (select coalesce(sum(lu.cost_cents), 0) from llm_usage lu
+      where lu.tenant_id = t.id and (p_start is null or lu.ts >= p_start)),
     max(c.created_at)
   from tenants t
   left join calls c on c.tenant_id = t.id

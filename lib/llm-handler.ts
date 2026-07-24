@@ -91,6 +91,8 @@ export async function handleLlm(req: Request): Promise<Response> {
     systemVolatile,
     messages,
     tools,
+    tenantId: tenant.id,
+    vapiCallId: body.call?.id ?? null,
   });
 
   return new Response(stream, {

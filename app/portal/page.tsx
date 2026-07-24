@@ -45,9 +45,9 @@ export default async function PortalDashboardPage({
           transfers={stats.transfers}
         />
         <ActivityCharts
-          // Strip cost before the RSC → client boundary; anything passed here
-          // is serialized into the page payload.
-          series={series.map(({ costCents: _cost, ...p }) => p)}
+          // Strip both cost fields before the RSC → client boundary; anything
+          // passed here is serialized into the page payload.
+          series={series.map(({ costCents: _c, llmCostCents: _l, ...p }) => p)}
           bucket={rangeBucket(range)}
         />
         <p className="text-xs text-muted-foreground/60">
