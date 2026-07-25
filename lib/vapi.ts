@@ -50,6 +50,42 @@ export function webhookUrl(baseUrl: string, secret: string): string {
   return withToken(`${baseUrl.replace(/\/$/, "")}/api/vapi/webhook`, secret);
 }
 
+// Vapi runs an analysis pass after every call at no extra cost. We ask it to
+// extract a lead classification into `analysis.structuredData` — this is "the
+// AI deciding if the caller is a lead" for free, business-agnostic so it works
+// for any tenant. The webhook turns a positive result into a leads row.
+const LEAD_ANALYSIS_PLAN = {
+  structuredDataPlan: {
+    enabled: true,
+    schema: {
+      type: "object",
+      properties: {
+        isLead: {
+          type: "boolean",
+          description:
+            "True if the caller is a potential customer/prospect for the business — asked about services, pricing, or expressed interest — even if they also booked a call. False for wrong numbers, spam, the business's own staff, or existing customers with support-only issues.",
+        },
+        qualified: {
+          type: "boolean",
+          description:
+            "True if the caller showed strong intent: booked a call, described a concrete need with a budget or timeline, or asked to be contacted.",
+        },
+        name: { type: "string", description: "Caller's name if given, else empty string." },
+        contact: {
+          type: "string",
+          description: "Best phone number or email the caller provided, else empty string.",
+        },
+        intent: {
+          type: "string",
+          description:
+            "Short phrase of what the caller wants, e.g. 'website for auto detailing business'. Empty string if not a lead.",
+        },
+      },
+      required: ["isLead", "qualified", "intent"],
+    },
+  },
+};
+
 // Per-tenant TTS voice. `version: 2` is a vapi-provider-only field.
 function buildVoice(config: TenantConfig): Record<string, unknown> {
   const provider = config.voice.provider ?? "vapi";
@@ -111,6 +147,9 @@ export function buildAssistantPayload(
       ...(opts.secret ? { secret: opts.secret } : {}),
     },
     serverMessages: ["end-of-call-report"],
+    // Free post-call lead classification (→ analysis.structuredData in the
+    // end-of-call-report; the webhook writes a leads row from it).
+    analysisPlan: LEAD_ANALYSIS_PLAN,
     // Live call control → monitor.controlUrl on tool-call webhooks — required
     // for the transfer_call handler to bridge the call.
     monitorPlan: { controlEnabled: true, listenEnabled: true },

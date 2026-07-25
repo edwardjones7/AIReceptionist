@@ -36,9 +36,23 @@ interface VapiWebhookBody {
     recordingUrl?: string;
     summary?: string;
     transcript?: string;
-    analysis?: { summary?: string; successEvaluation?: string };
+    analysis?: {
+      summary?: string;
+      successEvaluation?: string;
+      structuredData?: StructuredLead;
+    };
     artifact?: { transcript?: string; recordingUrl?: string };
   };
+}
+
+// Vapi's free post-call lead classification (assistant analysisPlan in
+// lib/vapi.ts). All fields optional — treat a missing block as "no signal".
+interface StructuredLead {
+  isLead?: boolean;
+  qualified?: boolean;
+  name?: string;
+  contact?: string;
+  intent?: string;
 }
 
 // Classify the call from what the tools actually recorded against it — free
@@ -69,6 +83,50 @@ async function classifyOutcome(
     console.error("classifyOutcome failed", e);
   }
   return hasTranscript ? "answered" : "missed";
+}
+
+// Turn Vapi's lead classification into a leads row, so a prospect who booked
+// (or was interested but didn't) still lands in the leads table. Deduped by
+// call: if the live capture_lead tool already saved one, we don't double it.
+// Free — no LLM call; Vapi did the classification as part of its analysis.
+async function maybeCaptureLead(opts: {
+  tenantId: string;
+  callId: string;
+  structured: StructuredLead | undefined;
+  outcome: Outcome;
+  summary: string;
+  callerNumber: string;
+}): Promise<void> {
+  try {
+    const sd = opts.structured;
+    // Trust Vapi's classification; if it's absent, fall back to "a booking
+    // means a lead" so booked prospects are always captured.
+    const isLead = sd?.isLead ?? opts.outcome === "booked";
+    if (!isLead) return;
+
+    const existing = await db()
+      .from("leads")
+      .select("id")
+      .eq("call_id", opts.callId)
+      .limit(1);
+    if (existing.data?.length) return;
+
+    const contact = (sd?.contact ?? "").trim();
+    const isEmail = contact.includes("@");
+    await db().from("leads").insert({
+      tenant_id: opts.tenantId,
+      call_id: opts.callId,
+      name: (sd?.name ?? "").trim(),
+      phone: isEmail ? opts.callerNumber : contact || opts.callerNumber,
+      email: isEmail ? contact : "",
+      intent: (sd?.intent ?? "").trim(),
+      details: opts.summary,
+      qualified: sd?.qualified ?? opts.outcome === "booked",
+      status: "new",
+    });
+  } catch (e) {
+    console.error("maybeCaptureLead failed", e);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -125,6 +183,18 @@ export async function POST(req: NextRequest) {
       call_id: callId,
       role: "system",
       text: transcript,
+    });
+  }
+
+  // Capture the caller as a lead if Vapi flagged them (or they booked).
+  if (callId) {
+    await maybeCaptureLead({
+      tenantId: tenant.id,
+      callId,
+      structured: msg.analysis?.structuredData,
+      outcome,
+      summary,
+      callerNumber: msg.call?.customer?.number ?? "",
     });
   }
 
