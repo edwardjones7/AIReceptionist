@@ -191,11 +191,33 @@ export interface VapiCall {
     successEvaluation?: string;
     structuredData?: Record<string, unknown>;
   };
-  artifact?: { transcript?: string; recordingUrl?: string };
+  artifact?: {
+    transcript?: string;
+    recordingUrl?: string;
+    // Signed, temporary, browser-playable recording URLs (raw recordingUrl is
+    // a private bucket that 400s). These expire ~1h after they're minted.
+    presignedMonoUrl?: string;
+    presignedStereoUrl?: string;
+  };
 }
 
 export async function getVapiCall(id: string): Promise<VapiCall> {
   return vapiFetch<VapiCall>(`/call/${id}`, { method: "GET" });
+}
+
+// A fresh, browser-playable recording URL for a call. Minted per request
+// because it expires — never store it. Returns null if there's no recording.
+export async function getCallRecordingUrl(
+  vapiCallId: string,
+): Promise<string | null> {
+  try {
+    const call = await getVapiCall(vapiCallId);
+    return (
+      call.artifact?.presignedMonoUrl ?? call.artifact?.presignedStereoUrl ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 // Recent calls for an assistant, newest first. Vapi returns full call objects

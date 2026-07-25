@@ -47,7 +47,7 @@ export function Transcript({
     <div className="space-y-3">
       {recordingUrl ? (
         // eslint-disable-next-line jsx-a11y/media-has-caption
-        <audio controls src={recordingUrl} className="w-full" preload="none" />
+        <audio controls src={recordingUrl} className="w-full" preload="metadata" />
       ) : null}
       {turns.length === 0 ? (
         <p className="text-sm text-muted-foreground">No transcript stored.</p>

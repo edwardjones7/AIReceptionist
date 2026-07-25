@@ -70,7 +70,7 @@ export function CallsTable({
               </span>
             </TableCell>
             <TableCell>
-              {c.recording_url ? (
+              {c.recording_url && !c.recording_url.includes("hipaa-recordings") ? (
                 <a
                   href={c.recording_url}
                   className="text-primary hover:underline"
