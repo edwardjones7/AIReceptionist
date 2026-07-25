@@ -148,7 +148,7 @@ export async function runPreflight(tenantId: string): Promise<PreflightReport> {
         if (assistant.model?.url !== llmUrl(env.publicBaseUrl, env.vapiServerSecret)) {
           stale.push("custom-LLM URL");
         }
-        if (assistant.server?.url !== webhookUrl(env.publicBaseUrl)) {
+        if (assistant.server?.url !== webhookUrl(env.publicBaseUrl, env.vapiServerSecret)) {
           stale.push("webhook URL");
         }
       }

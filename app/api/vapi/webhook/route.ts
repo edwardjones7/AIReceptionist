@@ -1,21 +1,21 @@
-// Vapi call-lifecycle webhook. We mainly care about `end-of-call-report`:
-// persist the call, run one offline Claude (Sonnet) summary, and post it to
-// Discord. Other event types are acknowledged and ignored for v1.
+// Vapi call-lifecycle webhook. We care about `end-of-call-report`: persist the
+// call with Vapi's own (free) summary + transcript, classify the outcome from
+// what actually happened on the call, and post it to Discord. Other event
+// types are acknowledged and ignored.
 //
-// Configure on the Vapi assistant: serverUrl = <PUBLIC_BASE_URL>/api/vapi/webhook
+// The assistant reaches this at <PUBLIC_BASE_URL>/api/vapi/webhook?token=<secret>
+// (Vapi doesn't reliably send the secret header — see lib/vapi.ts webhookUrl).
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyVapiSecret } from "@/lib/auth";
-import { env } from "@/lib/env";
 import { resolveTenant } from "@/lib/context";
-import { anthropic } from "@/lib/anthropic";
 import { db, upsertCallByVapiId } from "@/lib/supabase";
 import { postDiscord } from "@/lib/notify";
-import { recordLlmUsage, type LlmUsage } from "@/lib/llm-cost";
-import type { TenantConfig } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+type Outcome = "booked" | "lead" | "transferred" | "answered" | "missed";
 
 interface VapiWebhookBody {
   message?: {
@@ -36,66 +36,39 @@ interface VapiWebhookBody {
     recordingUrl?: string;
     summary?: string;
     transcript?: string;
+    analysis?: { summary?: string; successEvaluation?: string };
     artifact?: { transcript?: string; recordingUrl?: string };
   };
 }
 
-interface CallSummary {
-  summary: string;
-  outcome: "booked" | "lead" | "transferred" | "answered" | "missed";
-  usage?: LlmUsage;
-}
-
-async function summarize(
-  transcript: string,
-  tenant: TenantConfig,
-): Promise<CallSummary> {
-  const fallback: CallSummary = { summary: transcript.slice(0, 500), outcome: "answered" };
-  if (!transcript.trim()) return { summary: "No transcript captured.", outcome: "missed" };
+// Classify the call from what the tools actually recorded against it — free
+// and more accurate than asking an LLM to guess. Falls back to "answered"
+// (had a conversation) or "missed" (no transcript).
+async function classifyOutcome(
+  vapiCallId: string,
+  hasTranscript: boolean,
+): Promise<Outcome> {
   try {
-    const res = await anthropic().messages.create({
-      model: env.summaryModel,
-      max_tokens: 512,
-      system: `You summarize a phone call handled by ${tenant.agentName}, an AI receptionist for ${tenant.displayName}. Business context: ${tenant.knowledge.oneLiner} Be concise and factual. Output strict JSON.`,
-      messages: [
-        {
-          role: "user",
-          content: `Summarize this call in 2-3 sentences and classify the outcome.\n\nTranscript:\n${transcript}`,
-        },
-      ],
-      output_config: {
-        format: {
-          type: "json_schema",
-          schema: {
-            type: "object",
-            properties: {
-              summary: { type: "string" },
-              outcome: {
-                type: "string",
-                enum: ["booked", "lead", "transferred", "answered", "missed"],
-              },
-            },
-            required: ["summary", "outcome"],
-            additionalProperties: false,
-          },
-        },
-      },
-    });
-    const usage: LlmUsage = {
-      inputTokens: res.usage.input_tokens ?? 0,
-      outputTokens: res.usage.output_tokens ?? 0,
-      cacheReadTokens: res.usage.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: res.usage.cache_creation_input_tokens ?? 0,
-    };
-    const text = res.content.find((b) => b.type === "text");
-    if (text && text.type === "text") {
-      return { ...(JSON.parse(text.text) as CallSummary), usage };
+    const { data: call } = await db()
+      .from("calls")
+      .select("id")
+      .eq("vapi_call_id", vapiCallId)
+      .maybeSingle();
+    const callId = (call as { id?: string } | null)?.id;
+    if (callId) {
+      const [booking, transfer, lead] = await Promise.all([
+        db().from("bookings").select("id").eq("call_id", callId).limit(1),
+        db().from("transfers").select("id").eq("call_id", callId).limit(1),
+        db().from("leads").select("id").eq("call_id", callId).limit(1),
+      ]);
+      if (booking.data?.length) return "booked";
+      if (transfer.data?.length) return "transferred";
+      if (lead.data?.length) return "lead";
     }
-    return { ...fallback, usage };
   } catch (e) {
-    console.error("summarize failed", e);
-    return fallback;
+    console.error("classifyOutcome failed", e);
   }
+  return hasTranscript ? "answered" : "missed";
 }
 
 export async function POST(req: NextRequest) {
@@ -121,18 +94,13 @@ export async function POST(req: NextRequest) {
   const tenant = resolved.config;
 
   const transcript = msg.artifact?.transcript ?? msg.transcript ?? "";
-  const { summary, outcome, usage: summaryUsage } = await summarize(transcript, tenant);
-
-  // Record the Sonnet summary's token cost (best-effort).
-  if (summaryUsage) {
-    await recordLlmUsage({
-      tenantId: tenant.id,
-      vapiCallId,
-      model: env.summaryModel,
-      kind: "summary",
-      usage: summaryUsage,
-    });
-  }
+  // Vapi generates the summary as part of the call analysis at no extra cost —
+  // use it instead of a paid model call. Fall back to a transcript snippet.
+  const summary =
+    msg.analysis?.summary?.trim() ||
+    msg.summary?.trim() ||
+    (transcript ? transcript.slice(0, 500) : "No transcript captured.");
+  const outcome = await classifyOutcome(vapiCallId, Boolean(transcript.trim()));
 
   const recordingUrl = msg.recordingUrl ?? msg.artifact?.recordingUrl ?? null;
   const costCents =
@@ -149,7 +117,10 @@ export async function POST(req: NextRequest) {
     cost_cents: costCents,
   });
 
+  // Store the transcript once per call (idempotent: clear any prior rows first
+  // so a webhook retry doesn't duplicate it).
   if (callId && transcript) {
+    await db().from("transcripts").delete().eq("call_id", callId);
     await db().from("transcripts").insert({
       call_id: callId,
       role: "system",

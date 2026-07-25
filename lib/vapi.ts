@@ -29,18 +29,25 @@ async function vapiFetch<T>(
   return (text ? JSON.parse(text) : {}) as T;
 }
 
-// The custom-LLM URL the assistant calls. The token rides in the URL because
-// Vapi doesn't reliably forward the secret header there. Single source of
-// truth — buildAssistantPayload writes it, preflight verifies against it.
-export function llmUrl(baseUrl: string, secret: string): string {
-  const base = baseUrl.replace(/\/$/, "");
-  return secret
-    ? `${base}/api/llm?token=${encodeURIComponent(secret)}`
-    : `${base}/api/llm`;
+// Vapi does not reliably forward the server.secret HEADER to any of our
+// endpoints (custom-LLM, tools, webhook), so the credential rides in the URL
+// as ?token= — verifyVapiSecret accepts it from the query string. These three
+// helpers are the single source of truth: buildAssistantPayload writes them,
+// preflight verifies the live assistant against them.
+function withToken(url: string, secret: string): string {
+  return secret ? `${url}?token=${encodeURIComponent(secret)}` : url;
 }
 
-export function webhookUrl(baseUrl: string): string {
-  return `${baseUrl.replace(/\/$/, "")}/api/vapi/webhook`;
+export function llmUrl(baseUrl: string, secret: string): string {
+  return withToken(`${baseUrl.replace(/\/$/, "")}/api/llm`, secret);
+}
+
+export function toolsUrl(baseUrl: string, secret: string): string {
+  return withToken(`${baseUrl.replace(/\/$/, "")}/api/tools`, secret);
+}
+
+export function webhookUrl(baseUrl: string, secret: string): string {
+  return withToken(`${baseUrl.replace(/\/$/, "")}/api/vapi/webhook`, secret);
 }
 
 // Per-tenant TTS voice. `version: 2` is a vapi-provider-only field.
@@ -69,7 +76,7 @@ export function buildAssistantPayload(
       parameters: t.parameters,
     },
     server: {
-      url: `${base}/api/tools`,
+      url: toolsUrl(base, opts.secret),
       ...(opts.secret ? { secret: opts.secret } : {}),
     },
   }));
@@ -100,7 +107,7 @@ export function buildAssistantPayload(
     },
     voice: buildVoice(config),
     server: {
-      url: webhookUrl(base),
+      url: webhookUrl(base, opts.secret),
       ...(opts.secret ? { secret: opts.secret } : {}),
     },
     serverMessages: ["end-of-call-report"],
