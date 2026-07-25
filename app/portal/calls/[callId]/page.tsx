@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePortalTenant } from "@/lib/portal-auth";
-import { getCall, getTranscripts, getCallLinks } from "@/lib/admin-queries";
+import {
+  getCall,
+  getTranscripts,
+  getCallLinks,
+  getTenantTimezone,
+} from "@/lib/admin-queries";
+import { getCallRecordingUrl } from "@/lib/vapi";
 import { fmtDate, fmtDuration } from "@/lib/format";
 import { KV, Section } from "@/components/section";
 import { Transcript } from "@/components/records/transcript";
@@ -21,9 +27,13 @@ export default async function PortalCallDetailPage({
   const call = await getCall(tenantId, callId);
   if (!call) notFound();
 
-  const [transcripts, links] = await Promise.all([
+  const [transcripts, links, tz, recordingUrl] = await Promise.all([
     getTranscripts(call.id),
     getCallLinks(call.id),
+    getTenantTimezone(tenantId),
+    call.vapi_call_id
+      ? getCallRecordingUrl(call.vapi_call_id)
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -32,7 +42,7 @@ export default async function PortalCallDetailPage({
         <Link href="/portal/calls" className="text-primary hover:underline">
           calls
         </Link>{" "}
-        / {fmtDate(call.started_at ?? call.created_at)}
+        / {fmtDate(call.started_at ?? call.created_at, tz)}
       </p>
       <h1 className="mt-1 text-xl font-semibold">
         Call — {call.outcome ?? "unknown outcome"}
@@ -42,8 +52,8 @@ export default async function PortalCallDetailPage({
         <KV
           rows={[
             ["From", call.caller_number ?? "—"],
-            ["Started", fmtDate(call.started_at)],
-            ["Ended", fmtDate(call.ended_at)],
+            ["Started", fmtDate(call.started_at, tz)],
+            ["Ended", fmtDate(call.ended_at, tz)],
             ["Duration", fmtDuration(call.duration_sec)],
           ]}
         />
@@ -56,7 +66,7 @@ export default async function PortalCallDetailPage({
       </Section>
 
       <Section title="Transcript">
-        <Transcript rows={transcripts} recordingUrl={call.recording_url} />
+        <Transcript rows={transcripts} recordingUrl={recordingUrl} />
       </Section>
 
       {links.leads.length > 0 || links.bookings.length > 0 || links.transfers.length > 0 ? (
@@ -71,7 +81,7 @@ export default async function PortalCallDetailPage({
             {links.bookings.map((b) => (
               <p key={b.id}>
                 Booking — {b.type ?? "booking"} for {b.name ?? "unknown"} at{" "}
-                {fmtDate(b.slot_start)} ({b.status ?? "—"})
+                {fmtDate(b.slot_start, tz)} ({b.status ?? "—"})
               </p>
             ))}
             {links.transfers.map((t) => (

@@ -1,5 +1,5 @@
 import { requirePortalTenant } from "@/lib/portal-auth";
-import { recentLeads } from "@/lib/admin-queries";
+import { recentLeads, getTenantTimezone } from "@/lib/admin-queries";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { LeadsTable } from "@/components/records/tables";
@@ -14,7 +14,10 @@ export default async function PortalLeadsPage({
 }) {
   const { tenantId } = await requirePortalTenant();
   const page = pageParam((await searchParams).page);
-  const leads = await recentLeads(tenantId, page);
+  const [leads, tz] = await Promise.all([
+    recentLeads(tenantId, page),
+    getTenantTimezone(tenantId),
+  ]);
 
   return (
     <main>
@@ -23,7 +26,7 @@ export default async function PortalLeadsPage({
         Callers who wanted something — captured with contact details.
       </p>
       <Card className="mt-4 p-0">
-        <LeadsTable rows={leads.rows} page={page} />
+        <LeadsTable rows={leads.rows} page={page} tz={tz} />
       </Card>
       <Pager basePath="/portal/leads" page={page} hasMore={leads.hasMore} />
     </main>

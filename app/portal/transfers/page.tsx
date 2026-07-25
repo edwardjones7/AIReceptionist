@@ -1,5 +1,5 @@
 import { requirePortalTenant } from "@/lib/portal-auth";
-import { recentTransfers } from "@/lib/admin-queries";
+import { recentTransfers, getTenantTimezone } from "@/lib/admin-queries";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { TransfersTable } from "@/components/records/tables";
@@ -14,7 +14,10 @@ export default async function PortalTransfersPage({
 }) {
   const { tenantId } = await requirePortalTenant();
   const page = pageParam((await searchParams).page);
-  const transfers = await recentTransfers(tenantId, page);
+  const [transfers, tz] = await Promise.all([
+    recentTransfers(tenantId, page),
+    getTenantTimezone(tenantId),
+  ]);
 
   return (
     <main>
@@ -27,6 +30,7 @@ export default async function PortalTransfersPage({
           rows={transfers.rows}
           page={page}
           callHrefBase="/portal/calls"
+          tz={tz}
         />
       </Card>
       <Pager basePath="/portal/transfers" page={page} hasMore={transfers.hasMore} />

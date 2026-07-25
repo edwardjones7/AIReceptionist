@@ -1,5 +1,6 @@
 import { requirePortalTenant } from "@/lib/portal-auth";
-import { recentCalls } from "@/lib/admin-queries";
+import { recentCalls, getTenantTimezone } from "@/lib/admin-queries";
+import { reconcileRecentCalls } from "@/lib/call-store";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { CallsTable } from "@/components/records/tables";
@@ -14,7 +15,13 @@ export default async function PortalCallsPage({
 }) {
   const { tenantId } = await requirePortalTenant();
   const page = pageParam((await searchParams).page);
-  const calls = await recentCalls(tenantId, page);
+  // Self-heal: pull any calls Vapi didn't deliver a webhook for, so a client
+  // watching only their portal still sees every call (best-effort).
+  if (page === 1) await reconcileRecentCalls(tenantId).catch(() => {});
+  const [calls, tz] = await Promise.all([
+    recentCalls(tenantId, page),
+    getTenantTimezone(tenantId),
+  ]);
 
   return (
     <main>
@@ -23,7 +30,7 @@ export default async function PortalCallsPage({
         Every call answered, with a summary of what happened.
       </p>
       <Card className="mt-4 p-0">
-        <CallsTable rows={calls.rows} hrefBase="/portal/calls" page={page} />
+        <CallsTable rows={calls.rows} hrefBase="/portal/calls" page={page} tz={tz} />
       </Card>
       <Pager basePath="/portal/calls" page={page} hasMore={calls.hasMore} />
     </main>
