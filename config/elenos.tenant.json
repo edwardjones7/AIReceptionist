@@ -28,7 +28,8 @@
       "durationMinutes": 15,
       "description": "A free, quick fifteen-minute call — a diagnostic, not a sales pitch. The team looks at what they've got now and what would actually move the needle. No prices are discussed by the receptionist; that's for the call.",
       "offerWindowDays": 10,
-      "earliestHoursOut": 4
+      "earliestHoursOut": 4,
+      "api": { "baseUrl": "https://admin.elenos.ai" }
     },
     "job": {
       "enabled": false,

@@ -30,6 +30,11 @@ export interface TenantConfig {
       description: string;
       offerWindowDays: number;
       earliestHoursOut: number;
+      // Optional external booking backend (own availability + create-booking,
+      // e.g. the site's /book API). When set, Scarlett uses it instead of
+      // writing Google Calendar directly, so voice and web bookings are one
+      // system (same slots, same confirmation email/Meet/invite).
+      api?: { baseUrl: string };
     };
     job: {
       enabled: boolean;

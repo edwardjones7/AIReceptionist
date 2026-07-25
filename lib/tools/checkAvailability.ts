@@ -1,4 +1,5 @@
 import { findOpenSlots } from "../google-calendar";
+import { fetchExternalSlots } from "../booking-api";
 import type { ToolContext, ToolResult } from "../types";
 
 // Format an ISO instant as a spoken time in the tenant timezone, e.g.
@@ -23,6 +24,37 @@ export async function checkAvailability(
   if (!dc.enabled) {
     return { message: "Booking isn't available right now.", isError: true };
   }
+
+  // External booking backend (the tenant's own /book API) — its slots already
+  // reflect the real availability rules and calendar, so offer them directly.
+  if (dc.api?.baseUrl) {
+    try {
+      const iso = (await fetchExternalSlots(dc.api.baseUrl)).slice(0, 3);
+      if (iso.length === 0) {
+        return {
+          message:
+            "I don't see any open times in the next few days. Let me take your details and have someone reach out to find a time that works.",
+          data: { slots: [] },
+        };
+      }
+      const lines = iso.map(
+        (start, i) =>
+          `${i + 1}) ${spokenTime(start, ctx.tenant.timezone)} — slot_start=${start}`,
+      );
+      return {
+        message: `Open times. Offer these to the caller by their friendly time only — do NOT read the slot_start values aloud. When the caller picks one, call book_discovery_call with that option's slot_start value exactly:\n${lines.join("\n")}`,
+        data: { slots: iso.map((start) => ({ start })) },
+      };
+    } catch (e) {
+      console.error("fetchExternalSlots failed", e);
+      return {
+        message:
+          "I can't pull the calendar this second. Let me take your details and have someone lock in a time with you.",
+        data: { slots: [] },
+      };
+    }
+  }
+
   const hours = ctx.tenant.businessHours.mondayToFriday;
   if (!hours) {
     return { message: "No business hours are configured.", isError: true };

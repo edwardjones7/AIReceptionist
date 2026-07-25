@@ -40,6 +40,7 @@ export const TenantConfigSchema = z.object({
       description: z.string(),
       offerWindowDays: z.number().int().positive(),
       earliestHoursOut: z.number().nonnegative(),
+      api: z.object({ baseUrl: z.string().url() }).optional(),
     }),
     job: z.object({
       enabled: z.boolean(),

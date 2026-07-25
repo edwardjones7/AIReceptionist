@@ -72,12 +72,34 @@ export async function runPreflight(tenantId: string): Promise<PreflightReport> {
       : { key: "server-secret", label: "VAPI_SERVER_SECRET", status: "fail", detail: "not set — API routes reject everything in production" },
   );
 
-  // 3. Calendar — only when a booking flow is enabled.
+  // 3. Booking backend — only when a booking flow is enabled. An external
+  // /book API (config.booking.discoveryCall.api) replaces the calendar, so
+  // check that instead of Google Calendar sharing.
   const bookingEnabled =
     config != null &&
     (config.booking.discoveryCall.enabled || config.booking.job.enabled);
+  const bookingApi = config?.booking.discoveryCall.api?.baseUrl;
   if (!bookingEnabled) {
-    add({ key: "calendar", label: "Google Calendar", status: "skip", detail: "no booking flow enabled" });
+    add({ key: "calendar", label: "Booking backend", status: "skip", detail: "no booking flow enabled" });
+  } else if (bookingApi) {
+    try {
+      const res = await fetch(`${bookingApi.replace(/\/$/, "")}/api/booking/slots/`, {
+        headers: { Accept: "application/json" },
+      });
+      const data = res.ok ? ((await res.json()) as { slots?: string[] }) : null;
+      add(
+        res.ok
+          ? {
+              key: "calendar",
+              label: "Booking API",
+              status: "pass",
+              detail: `${bookingApi} — ${data?.slots?.length ?? 0} open slots`,
+            }
+          : { key: "calendar", label: "Booking API", status: "fail", detail: `${bookingApi} returned ${res.status}` },
+      );
+    } catch (e) {
+      add({ key: "calendar", label: "Booking API", status: "fail", detail: (e as Error).message.slice(0, 200) });
+    }
   } else if (!row.calendar_id) {
     add({ key: "calendar", label: "Google Calendar", status: "fail", detail: "booking is enabled but no calendar id is set" });
   } else {
