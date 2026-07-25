@@ -174,6 +174,44 @@ export async function getAssistant(id: string): Promise<AssistantSnapshot> {
   return vapiFetch<AssistantSnapshot>(`/assistant/${id}`, { method: "GET" });
 }
 
+export interface VapiCall {
+  id: string;
+  assistantId?: string;
+  status?: string;
+  endedReason?: string;
+  startedAt?: string;
+  endedAt?: string;
+  cost?: number;
+  recordingUrl?: string;
+  transcript?: string;
+  summary?: string;
+  customer?: { number?: string };
+  analysis?: {
+    summary?: string;
+    successEvaluation?: string;
+    structuredData?: Record<string, unknown>;
+  };
+  artifact?: { transcript?: string; recordingUrl?: string };
+}
+
+export async function getVapiCall(id: string): Promise<VapiCall> {
+  return vapiFetch<VapiCall>(`/call/${id}`, { method: "GET" });
+}
+
+// Recent calls for an assistant, newest first. Vapi returns full call objects
+// (transcript + analysis included), so the reconcile path needs no per-call
+// follow-up fetch.
+export async function listVapiCalls(opts: {
+  assistantId: string;
+  limit?: number;
+}): Promise<VapiCall[]> {
+  const q = new URLSearchParams({
+    assistantId: opts.assistantId,
+    limit: String(opts.limit ?? 20),
+  });
+  return vapiFetch<VapiCall[]>(`/call?${q.toString()}`, { method: "GET" });
+}
+
 export async function updateAssistant(
   id: string,
   payload: Record<string, unknown>,

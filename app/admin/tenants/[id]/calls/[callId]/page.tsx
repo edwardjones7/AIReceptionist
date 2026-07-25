@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
-import { getCall, getTranscripts, getCallLinks } from "@/lib/admin-queries";
+import {
+  getCall,
+  getTranscripts,
+  getCallLinks,
+  getTenantTimezone,
+} from "@/lib/admin-queries";
 import { fmtCents, fmtDate, fmtDuration } from "@/lib/format";
 import { KV, Section } from "@/components/section";
 import { Transcript } from "@/components/records/transcript";
@@ -19,9 +24,10 @@ export default async function CallDetailPage({
   const call = await getCall(id, callId);
   if (!call) notFound();
 
-  const [transcripts, links] = await Promise.all([
+  const [transcripts, links, tz] = await Promise.all([
     getTranscripts(call.id),
     getCallLinks(call.id),
+    getTenantTimezone(id),
   ]);
 
   return (
@@ -30,7 +36,7 @@ export default async function CallDetailPage({
         <Link href={`/admin/tenants/${id}/calls`} className="text-primary hover:underline">
           calls
         </Link>{" "}
-        / {fmtDate(call.started_at ?? call.created_at)}
+        / {fmtDate(call.started_at ?? call.created_at, tz)}
       </p>
       <h1 className="mt-1 text-xl font-semibold">
         Call — {call.outcome ?? "unknown outcome"}
@@ -40,8 +46,8 @@ export default async function CallDetailPage({
         <KV
           rows={[
             ["From", call.caller_number ?? "—"],
-            ["Started", fmtDate(call.started_at)],
-            ["Ended", fmtDate(call.ended_at)],
+            ["Started", fmtDate(call.started_at, tz)],
+            ["Ended", fmtDate(call.ended_at, tz)],
             ["Duration", fmtDuration(call.duration_sec)],
             ["Vapi cost", call.cost_cents != null ? fmtCents(call.cost_cents) : "—"],
             [

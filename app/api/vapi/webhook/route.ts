@@ -1,21 +1,20 @@
-// Vapi call-lifecycle webhook. We care about `end-of-call-report`: persist the
-// call with Vapi's own (free) summary + transcript, classify the outcome from
-// what actually happened on the call, and post it to Discord. Other event
-// types are acknowledged and ignored.
+// Vapi call-lifecycle webhook. On `end-of-call-report` it stores the call
+// (summary, transcript, outcome, lead) and posts a Discord summary. The heavy
+// lifting lives in lib/call-store so the reconcile path logs calls identically.
 //
-// The assistant reaches this at <PUBLIC_BASE_URL>/api/vapi/webhook?token=<secret>
-// (Vapi doesn't reliably send the secret header — see lib/vapi.ts webhookUrl).
+// The assistant reaches this at <PUBLIC_BASE_URL>/api/vapi/webhook?token=<secret>.
+// Vapi doesn't reliably attach the secret to server messages (especially on
+// forwarded calls), so auth also falls back to verifying the call id is real.
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyVapiSecret } from "@/lib/auth";
 import { resolveTenant } from "@/lib/context";
-import { db, upsertCallByVapiId } from "@/lib/supabase";
+import { getVapiCall } from "@/lib/vapi";
+import { storeCall, type StructuredLead } from "@/lib/call-store";
 import { postDiscord } from "@/lib/notify";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-type Outcome = "booked" | "lead" | "transferred" | "answered" | "missed";
 
 interface VapiWebhookBody {
   message?: {
@@ -45,158 +44,64 @@ interface VapiWebhookBody {
   };
 }
 
-// Vapi's free post-call lead classification (assistant analysisPlan in
-// lib/vapi.ts). All fields optional — treat a missing block as "no signal".
-interface StructuredLead {
-  isLead?: boolean;
-  qualified?: boolean;
-  name?: string;
-  contact?: string;
-  intent?: string;
-}
-
-// Classify the call from what the tools actually recorded against it — free
-// and more accurate than asking an LLM to guess. Falls back to "answered"
-// (had a conversation) or "missed" (no transcript).
-async function classifyOutcome(
-  vapiCallId: string,
-  hasTranscript: boolean,
-): Promise<Outcome> {
+// Confirm a report is genuine by resolving its call id against our own Vapi
+// account. A random caller can't guess a real call UUID, so this safely backs
+// up the shared secret without depending on Vapi attaching it.
+async function isRealVapiCall(id: string | undefined): Promise<boolean> {
+  if (!id) return false;
   try {
-    const { data: call } = await db()
-      .from("calls")
-      .select("id")
-      .eq("vapi_call_id", vapiCallId)
-      .maybeSingle();
-    const callId = (call as { id?: string } | null)?.id;
-    if (callId) {
-      const [booking, transfer, lead] = await Promise.all([
-        db().from("bookings").select("id").eq("call_id", callId).limit(1),
-        db().from("transfers").select("id").eq("call_id", callId).limit(1),
-        db().from("leads").select("id").eq("call_id", callId).limit(1),
-      ]);
-      if (booking.data?.length) return "booked";
-      if (transfer.data?.length) return "transferred";
-      if (lead.data?.length) return "lead";
-    }
-  } catch (e) {
-    console.error("classifyOutcome failed", e);
-  }
-  return hasTranscript ? "answered" : "missed";
-}
-
-// Turn Vapi's lead classification into a leads row, so a prospect who booked
-// (or was interested but didn't) still lands in the leads table. Deduped by
-// call: if the live capture_lead tool already saved one, we don't double it.
-// Free — no LLM call; Vapi did the classification as part of its analysis.
-async function maybeCaptureLead(opts: {
-  tenantId: string;
-  callId: string;
-  structured: StructuredLead | undefined;
-  outcome: Outcome;
-  summary: string;
-  callerNumber: string;
-}): Promise<void> {
-  try {
-    const sd = opts.structured;
-    // Trust Vapi's classification; if it's absent, fall back to "a booking
-    // means a lead" so booked prospects are always captured.
-    const isLead = sd?.isLead ?? opts.outcome === "booked";
-    if (!isLead) return;
-
-    const existing = await db()
-      .from("leads")
-      .select("id")
-      .eq("call_id", opts.callId)
-      .limit(1);
-    if (existing.data?.length) return;
-
-    const contact = (sd?.contact ?? "").trim();
-    const isEmail = contact.includes("@");
-    await db().from("leads").insert({
-      tenant_id: opts.tenantId,
-      call_id: opts.callId,
-      name: (sd?.name ?? "").trim(),
-      phone: isEmail ? opts.callerNumber : contact || opts.callerNumber,
-      email: isEmail ? contact : "",
-      intent: (sd?.intent ?? "").trim(),
-      details: opts.summary,
-      qualified: sd?.qualified ?? opts.outcome === "booked",
-      status: "new",
-    });
-  } catch (e) {
-    console.error("maybeCaptureLead failed", e);
+    const call = await getVapiCall(id);
+    return Boolean(call?.id);
+  } catch {
+    return false;
   }
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyVapiSecret(req)) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const body = (await req.json()) as VapiWebhookBody;
+  const body = (await req.json().catch(() => ({}))) as VapiWebhookBody;
   const msg = body.message ?? {};
 
-  // Acknowledge everything; only end-of-call-report does work.
+  // Acknowledge non-report events; only end-of-call-report does work.
   if (msg.type !== "end-of-call-report") {
     return NextResponse.json({ ok: true });
   }
 
   const vapiCallId = msg.call?.id;
+
+  const secretOk = verifyVapiSecret(req);
+  const genuine = secretOk || (await isRealVapiCall(vapiCallId));
+  console.log("vapi webhook", {
+    callId: vapiCallId,
+    endedReason: msg.endedReason,
+    auth: secretOk ? "secret" : genuine ? "vapi-verified" : "rejected",
+  });
+  if (!genuine) return new Response("Unauthorized", { status: 401 });
   if (!vapiCallId) return NextResponse.json({ ok: true });
 
   const resolved = await resolveTenant({
     assistantId: msg.call?.assistantId ?? msg.assistant?.id,
     phoneNumberId: msg.call?.phoneNumberId,
   });
-  const tenant = resolved.config;
 
   const transcript = msg.artifact?.transcript ?? msg.transcript ?? "";
-  // Vapi generates the summary as part of the call analysis at no extra cost —
-  // use it instead of a paid model call. Fall back to a transcript snippet.
   const summary =
     msg.analysis?.summary?.trim() ||
     msg.summary?.trim() ||
     (transcript ? transcript.slice(0, 500) : "No transcript captured.");
-  const outcome = await classifyOutcome(vapiCallId, Boolean(transcript.trim()));
 
-  const recordingUrl = msg.recordingUrl ?? msg.artifact?.recordingUrl ?? null;
-  const costCents =
-    typeof msg.cost === "number" ? Math.round(msg.cost * 100) : null;
-
-  const callId = await upsertCallByVapiId(tenant.id, vapiCallId, {
-    caller_number: msg.call?.customer?.number ?? null,
-    started_at: msg.startedAt ?? null,
-    ended_at: msg.endedAt ?? null,
-    duration_sec: msg.durationSeconds ?? null,
-    outcome,
+  const { outcome } = await storeCall({
+    tenantId: resolved.config.id,
+    vapiCallId,
+    callerNumber: msg.call?.customer?.number ?? null,
+    startedAt: msg.startedAt ?? null,
+    endedAt: msg.endedAt ?? null,
+    durationSec: msg.durationSeconds ?? null,
+    costCents: typeof msg.cost === "number" ? Math.round(msg.cost * 100) : null,
+    recordingUrl: msg.recordingUrl ?? msg.artifact?.recordingUrl ?? null,
     summary,
-    recording_url: recordingUrl,
-    cost_cents: costCents,
+    transcript,
+    structured: msg.analysis?.structuredData,
   });
-
-  // Store the transcript once per call (idempotent: clear any prior rows first
-  // so a webhook retry doesn't duplicate it).
-  if (callId && transcript) {
-    await db().from("transcripts").delete().eq("call_id", callId);
-    await db().from("transcripts").insert({
-      call_id: callId,
-      role: "system",
-      text: transcript,
-    });
-  }
-
-  // Capture the caller as a lead if Vapi flagged them (or they booked).
-  if (callId) {
-    await maybeCaptureLead({
-      tenantId: tenant.id,
-      callId,
-      structured: msg.analysis?.structuredData,
-      outcome,
-      summary,
-      callerNumber: msg.call?.customer?.number ?? "",
-    });
-  }
 
   await postDiscord(resolved.settings.discordWebhookUrl, {
     title: `Call summary — ${outcome}`,

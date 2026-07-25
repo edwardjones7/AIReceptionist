@@ -105,6 +105,18 @@ export interface TenantRow {
   updated_at: string | null;
 }
 
+// The tenant's business timezone (for formatting dates in the dashboard).
+// Defaults to America/New_York if unset.
+export async function getTenantTimezone(id: string): Promise<string> {
+  const { data } = await db()
+    .from("tenants")
+    .select("config")
+    .eq("id", id)
+    .maybeSingle();
+  const tz = (data as { config?: { timezone?: string } } | null)?.config?.timezone;
+  return tz || "America/New_York";
+}
+
 export async function getTenantRow(id: string): Promise<TenantRow | null> {
   const { data, error } = await db()
     .from("tenants")

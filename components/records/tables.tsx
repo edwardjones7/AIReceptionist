@@ -34,10 +34,12 @@ export function CallsTable({
   rows,
   hrefBase,
   page,
+  tz,
 }: {
   rows: CallRow[];
   hrefBase: string;
   page: number;
+  tz?: string;
 }) {
   return (
     <Table>
@@ -56,14 +58,16 @@ export function CallsTable({
           <TableRow key={c.id}>
             <TableCell className="whitespace-nowrap">
               <Link href={`${hrefBase}/${c.id}`} className="text-primary hover:underline">
-                {fmtDate(c.started_at ?? c.created_at)}
+                {fmtDate(c.started_at ?? c.created_at, tz)}
               </Link>
             </TableCell>
             <TableCell>{c.caller_number ?? "—"}</TableCell>
             <TableCell>{fmtDuration(c.duration_sec)}</TableCell>
             <TableCell>{c.outcome ?? "—"}</TableCell>
-            <TableCell className="max-w-md whitespace-normal text-muted-foreground">
-              {c.summary ?? "—"}
+            <TableCell className="max-w-md text-muted-foreground">
+              <span className="line-clamp-2" title={c.summary ?? ""}>
+                {c.summary ?? "—"}
+              </span>
             </TableCell>
             <TableCell>
               {c.recording_url ? (
@@ -91,10 +95,12 @@ export function LeadsTable({
   rows,
   page,
   actionSlot,
+  tz,
 }: {
   rows: LeadRow[];
   page: number;
   actionSlot?: (row: LeadRow) => React.ReactNode;
+  tz?: string;
 }) {
   return (
     <Table>
@@ -112,12 +118,18 @@ export function LeadsTable({
       <TableBody>
         {rows.map((l) => (
           <TableRow key={l.id}>
-            <TableCell className="whitespace-nowrap">{fmtDate(l.created_at)}</TableCell>
+            <TableCell className="whitespace-nowrap">{fmtDate(l.created_at, tz)}</TableCell>
             <TableCell>{l.name || "—"}</TableCell>
             <TableCell>{[l.phone, l.email].filter(Boolean).join(" · ") || "—"}</TableCell>
-            <TableCell>{l.intent ?? "—"}</TableCell>
-            <TableCell className="max-w-sm whitespace-normal text-muted-foreground">
-              {l.details ?? "—"}
+            <TableCell className="max-w-[14rem]">
+              <span className="line-clamp-2" title={l.intent ?? ""}>
+                {l.intent ?? "—"}
+              </span>
+            </TableCell>
+            <TableCell className="max-w-sm text-muted-foreground">
+              <span className="line-clamp-2" title={l.details ?? ""}>
+                {l.details ?? "—"}
+              </span>
             </TableCell>
             <TableCell>{l.qualified ? "yes" : "no"}</TableCell>
             <TableCell className="whitespace-nowrap">
@@ -135,10 +147,12 @@ export function BookingsTable({
   rows,
   page,
   actionSlot,
+  tz,
 }: {
   rows: BookingRow[];
   page: number;
   actionSlot?: (row: BookingRow) => React.ReactNode;
+  tz?: string;
 }) {
   return (
     <Table>
@@ -155,11 +169,11 @@ export function BookingsTable({
       <TableBody>
         {rows.map((b) => (
           <TableRow key={b.id}>
-            <TableCell className="whitespace-nowrap">{fmtDate(b.slot_start)}</TableCell>
+            <TableCell className="whitespace-nowrap">{fmtDate(b.slot_start, tz)}</TableCell>
             <TableCell>{b.type ?? "—"}</TableCell>
             <TableCell>{b.name || "—"}</TableCell>
             <TableCell>{[b.phone, b.email].filter(Boolean).join(" · ") || "—"}</TableCell>
-            <TableCell className="whitespace-nowrap">{fmtDate(b.created_at)}</TableCell>
+            <TableCell className="whitespace-nowrap">{fmtDate(b.created_at, tz)}</TableCell>
             <TableCell className="whitespace-nowrap">
               {actionSlot ? actionSlot(b) : <StatusBadge status={b.status ?? "confirmed"} />}
             </TableCell>
@@ -175,10 +189,12 @@ export function TransfersTable({
   rows,
   page,
   callHrefBase,
+  tz,
 }: {
   rows: TransferRow[];
   page: number;
   callHrefBase?: string;
+  tz?: string;
 }) {
   return (
     <Table>
@@ -194,13 +210,15 @@ export function TransfersTable({
       <TableBody>
         {rows.map((t) => (
           <TableRow key={t.id}>
-            <TableCell className="whitespace-nowrap">{fmtDate(t.ts)}</TableCell>
+            <TableCell className="whitespace-nowrap">{fmtDate(t.ts, tz)}</TableCell>
             <TableCell>
               {t.status ? <StatusBadge status={t.status} /> : "—"}
             </TableCell>
             <TableCell>{t.to_number ?? "—"}</TableCell>
-            <TableCell className="max-w-md whitespace-normal text-muted-foreground">
-              {t.reason ?? t.summary ?? "—"}
+            <TableCell className="max-w-md text-muted-foreground">
+              <span className="line-clamp-2" title={t.reason ?? t.summary ?? ""}>
+                {t.reason ?? t.summary ?? "—"}
+              </span>
             </TableCell>
             <TableCell>
               {t.call_id && callHrefBase ? (

@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { recentBookings } from "@/lib/admin-queries";
+import { recentBookings, getTenantTimezone } from "@/lib/admin-queries";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,10 @@ export default async function TenantBookingsPage({
   const { id } = await params;
   const sp = await searchParams;
   const page = pageParam(sp.page);
-  const bookings = await recentBookings(id, page);
+  const [bookings, tz] = await Promise.all([
+    recentBookings(id, page),
+    getTenantTimezone(id),
+  ]);
   const back = `/admin/tenants/${id}/bookings${page > 1 ? `?page=${page}` : ""}`;
 
   return (
@@ -33,6 +36,7 @@ export default async function TenantBookingsPage({
         <BookingsTable
           rows={bookings.rows}
           page={page}
+          tz={tz}
           actionSlot={(b) => (
             <form action={setBookingStatus} className="flex items-center gap-1.5">
               <input type="hidden" name="tenant_id" value={id} />

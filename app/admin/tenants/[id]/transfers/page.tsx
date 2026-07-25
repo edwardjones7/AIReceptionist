@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { recentTransfers } from "@/lib/admin-queries";
+import { recentTransfers, getTenantTimezone } from "@/lib/admin-queries";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { TransfersTable } from "@/components/records/tables";
@@ -17,7 +17,10 @@ export default async function TenantTransfersPage({
   await requireAdmin();
   const { id } = await params;
   const page = pageParam((await searchParams).page);
-  const transfers = await recentTransfers(id, page);
+  const [transfers, tz] = await Promise.all([
+    recentTransfers(id, page),
+    getTenantTimezone(id),
+  ]);
 
   return (
     <main>
@@ -30,6 +33,7 @@ export default async function TenantTransfersPage({
           rows={transfers.rows}
           page={page}
           callHrefBase={`/admin/tenants/${id}/calls`}
+          tz={tz}
         />
       </Card>
       <Pager

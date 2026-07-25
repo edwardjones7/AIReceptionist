@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { recentLeads } from "@/lib/admin-queries";
+import { recentLeads, getTenantTimezone } from "@/lib/admin-queries";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,10 @@ export default async function TenantLeadsPage({
   const { id } = await params;
   const sp = await searchParams;
   const page = pageParam(sp.page);
-  const leads = await recentLeads(id, page);
+  const [leads, tz] = await Promise.all([
+    recentLeads(id, page),
+    getTenantTimezone(id),
+  ]);
   const back = `/admin/tenants/${id}/leads${page > 1 ? `?page=${page}` : ""}`;
 
   return (
@@ -33,6 +36,7 @@ export default async function TenantLeadsPage({
         <LeadsTable
           rows={leads.rows}
           page={page}
+          tz={tz}
           actionSlot={(l) => (
             <form action={setLeadStatus} className="flex items-center gap-1.5">
               <input type="hidden" name="tenant_id" value={id} />

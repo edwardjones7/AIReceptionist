@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { recentCalls } from "@/lib/admin-queries";
+import { recentCalls, getTenantTimezone } from "@/lib/admin-queries";
+import { reconcileRecentCalls } from "@/lib/call-store";
 import { pageParam } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { CallsTable } from "@/components/records/tables";
@@ -17,7 +18,13 @@ export default async function TenantCallsPage({
   await requireAdmin();
   const { id } = await params;
   const page = pageParam((await searchParams).page);
-  const calls = await recentCalls(id, page);
+  // Self-heal: pull any recent calls Vapi didn't deliver a webhook report for
+  // (forwarded/transferred calls especially). Best-effort — never blocks render.
+  if (page === 1) await reconcileRecentCalls(id).catch(() => {});
+  const [calls, tz] = await Promise.all([
+    recentCalls(id, page),
+    getTenantTimezone(id),
+  ]);
 
   return (
     <main>
@@ -27,6 +34,7 @@ export default async function TenantCallsPage({
           rows={calls.rows}
           hrefBase={`/admin/tenants/${id}/calls`}
           page={page}
+          tz={tz}
         />
       </Card>
       <Pager
