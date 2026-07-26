@@ -113,11 +113,13 @@ export async function storeCall(
     caller_number: input.callerNumber,
     started_at: input.startedAt,
     ended_at: input.endedAt,
-    duration_sec: input.durationSec,
+    // Vapi reports fractional seconds (e.g. 72.001); duration_sec is an integer
+    // column, so round or the whole write 400s and nothing stores.
+    duration_sec: input.durationSec == null ? null : Math.round(input.durationSec),
     outcome,
     summary: input.summary,
     recording_url: input.recordingUrl,
-    cost_cents: input.costCents,
+    cost_cents: input.costCents == null ? null : Math.round(input.costCents),
   });
 
   if (callId && input.transcript) {
@@ -187,7 +189,7 @@ export async function reconcileRecentCalls(tenantId?: string): Promise<number> {
     if (tenantId) q = q.eq("id", tenantId);
     const { data: tenants } = await q;
 
-    const cutoff = Date.now() - 6 * 3600_000; // last 6 hours
+    const cutoff = Date.now() - 24 * 3600_000; // last 24 hours
     for (const t of (tenants ?? []) as { id: string; vapi_assistant_id: string }[]) {
       let calls: VapiCall[] = [];
       try {
