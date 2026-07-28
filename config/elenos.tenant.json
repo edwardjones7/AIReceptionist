@@ -25,8 +25,8 @@
     "discoveryCall": {
       "enabled": true,
       "name": "discovery call",
-      "durationMinutes": 15,
-      "description": "A free, quick fifteen-minute call — a diagnostic, not a sales pitch. The team looks at what they've got now and what would actually move the needle. No prices are discussed by the receptionist; that's for the call.",
+      "durationMinutes": 30,
+      "description": "A free thirty-minute call — a diagnostic, not a sales pitch. The team looks at what they've got now and what would actually move the needle. No prices are discussed by the receptionist; that's for the call.",
       "offerWindowDays": 10,
       "earliestHoursOut": 4,
       "api": { "baseUrl": "https://admin.elenos.ai" }
@@ -52,10 +52,10 @@
     ],
     "pricing": {
       "rule": "NEVER say any price, number, dollar figure, or range — there are none to give. Everything is custom and pricing is only ever discussed on a call with the team. Deflect EVERY question about cost, budget, 'how much', 'ballpark', or 'even roughly' to booking the quick call — never give a number even if the caller pushes.",
-      "spokenLine": "So everything we build is custom — the investment really depends on the size of your business and which systems actually make sense for you. The best move is a quick fifteen-minute call where we can look at what you've got now and what would actually move the needle. Want me to find a time?"
+      "spokenLine": "So everything we build is custom — the investment really depends on the size of your business and which systems actually make sense for you. The best move is a quick thirty-minute call where we can look at what you've got now and what would actually move the needle. Want me to find a time?"
     },
     "promiseDiscipline": "Elenos builds the systems that convert traffic into booked work. We do not promise leads — lead generation is the client's input. Never promise results.",
-    "cta": "Book a free, quick fifteen-minute call.",
+    "cta": "Book a free, quick thirty-minute call.",
     "website": "elenos.ai"
   },
 
@@ -70,7 +70,7 @@
     },
     {
       "q": "How much does a website / a build cost? / What's your pricing / budget?",
-      "a": "Never give any number, dollar figure, or range. Deflect every time with the custom / investment-varies framing and offer the quick fifteen-minute call. Even if they push for a ballpark, hold the line: pricing is only discussed on the call."
+      "a": "Never give any number, dollar figure, or range. Deflect every time with the custom / investment-varies framing and offer the quick thirty-minute call. Even if they push for a ballpark, hold the line: pricing is only discussed on the call."
     },
     {
       "q": "How long does a build take?",
