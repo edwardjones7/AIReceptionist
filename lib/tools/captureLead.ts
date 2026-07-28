@@ -8,7 +8,7 @@ export async function captureLead(
 ): Promise<ToolResult> {
   const name = String(input.name ?? "").trim();
   const phone = String(input.phone ?? "").trim() || ctx.callerNumber || "";
-  const email = String(input.email ?? "").trim();
+  const email = String(input.email ?? "").replace(/\s+/g, "").toLowerCase();
   const intent = String(input.intent ?? "").trim();
   const details = String(input.details ?? "").trim();
   const qualified = Boolean(input.qualified);

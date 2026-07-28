@@ -42,7 +42,10 @@ export async function bookDiscoveryCall(
   const name = String(input.name ?? "").trim();
   // Callers rarely dictate their number — fall back to the caller ID.
   const phone = String(input.phone ?? "").trim() || (ctx.callerNumber ?? "").trim();
-  const email = String(input.email ?? "").trim();
+  // Spoken emails come through with stray spaces and casing from speech-to-text
+  // (e.g. "cheriselyn n1@gmail.com"); strip whitespace and lowercase so a valid
+  // address isn't rejected by the booking API over an artifact.
+  const email = String(input.email ?? "").replace(/\s+/g, "").toLowerCase();
   const slotStart = String(input.slot_start ?? "").trim();
 
   if (!name || !slotStart) {
@@ -68,6 +71,14 @@ export async function bookDiscoveryCall(
       return {
         message:
           "I'll need an email to send the calendar invite — what's the best one for you?",
+        isError: true,
+      };
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      // Malformed email — don't book to a bad address; have her re-confirm.
+      return {
+        message:
+          "I don't think I caught that email quite right — could you spell it out for me once more, letter by letter, including the part before the at sign?",
         isError: true,
       };
     }
