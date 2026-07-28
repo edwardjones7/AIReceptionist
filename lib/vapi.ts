@@ -4,7 +4,7 @@
 
 import twilio from "twilio";
 import { env } from "./env";
-import { toolsForTenant } from "./tools";
+import { provisionTools } from "./tools";
 import { firstMessage } from "./personas/scarlett";
 import type { TenantConfig } from "./types";
 
@@ -104,7 +104,7 @@ export function buildAssistantPayload(
   opts: { baseUrl: string; secret: string; llmModel: string },
 ): Record<string, unknown> {
   const base = opts.baseUrl.replace(/\/$/, "");
-  const tools: unknown[] = toolsForTenant(config).map((t) => ({
+  const tools: unknown[] = provisionTools().map((t) => ({
     type: "function" as const,
     function: {
       name: t.name,

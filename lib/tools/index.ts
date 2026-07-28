@@ -231,6 +231,16 @@ export function toolsForTenant(t: TenantConfig): ToolDef[] {
   return TOOLS.filter((tool) => tool.enabledFor(t));
 }
 
+// Every tool, registered on the Vapi assistant regardless of per-tenant
+// enablement. Vapi needs a tool registered to know where to dispatch it, so we
+// register them all; what Scarlett is actually *offered* on a given call is
+// gated live in /api/llm (clientToolsFor/founderToolsFor read the current
+// config). This makes ability toggles take effect on the next call — no
+// re-provision.
+export function provisionTools(): ToolDef[] {
+  return TOOLS;
+}
+
 export function findTool(name: string): ToolDef | undefined {
   return TOOLS.find((t) => t.name === name);
 }

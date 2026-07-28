@@ -396,6 +396,48 @@ export async function removePortalUser(formData: FormData): Promise<void> {
   redirect(back);
 }
 
+// Per-tenant ability toggles (checkboxes on the tenant page). These flip the
+// enablement flags in the config jsonb; /api/llm reads them live, so a change
+// takes effect on the next call (~60s) with no re-provision — the assistant
+// already has every tool registered (see provisionTools).
+export async function saveTenantAbilities(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) redirect("/admin");
+
+  const { data } = await db()
+    .from("tenants")
+    .select("config")
+    .eq("id", id)
+    .maybeSingle();
+  const cfg = (data as { config?: TenantConfig } | null)?.config;
+  if (!cfg) {
+    redirect(`/admin/tenants/${id}?perror=${encodeURIComponent("No config to update.")}`);
+  }
+
+  cfg.transfer.enabled = formData.get("transfer_enabled") === "on";
+  cfg.booking.discoveryCall.enabled = formData.get("booking_enabled") === "on";
+  cfg.booking.job.enabled = formData.get("job_enabled") === "on";
+
+  const parsed = safeParseTenantConfig(cfg);
+  if (!parsed.ok) {
+    redirect(`/admin/tenants/${id}?perror=${encodeURIComponent(parsed.errors[0] ?? "Invalid config.")}`);
+  }
+
+  const { error } = await db()
+    .from("tenants")
+    .update({ config: parsed.config, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.error("saveTenantAbilities failed", error);
+    redirect(`/admin/tenants/${id}?perror=${encodeURIComponent(error.message.slice(0, 300))}`);
+  }
+
+  invalidateTenantCache(id);
+  revalidatePath(`/admin/tenants/${id}`, "layout");
+  redirect(`/admin/tenants/${id}?saved=1`);
+}
+
 export async function setTenantStatus(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");

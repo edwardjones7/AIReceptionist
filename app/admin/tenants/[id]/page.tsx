@@ -13,12 +13,14 @@ import {
   addPortalUser,
   removePortalUser,
   saveTenantSettings,
+  saveTenantAbilities,
   setTenantStatus,
   provisionTenantAction,
   deprovisionTenantAction,
   deleteTenantAction,
   runPreflightAction,
 } from "../../actions";
+import type { TenantConfig } from "@/lib/types";
 import { Field, KV, Section } from "@/components/section";
 import { StatusBadge } from "@/components/status-badge";
 import { RangeTabs } from "@/components/stats/range-tabs";
@@ -305,6 +307,58 @@ export default async function TenantOverviewPage({
           portal shows stats, calls, transcripts, leads, and bookings for this
           tenant only — never cost.
         </p>
+      </Section>
+
+      <Section title="Abilities">
+        <p className="text-sm text-muted-foreground">
+          Turn features on or off for this tenant. Takes effect on the next call
+          (~60s) — no re-provision needed.
+        </p>
+        {(() => {
+          const cfg = row.config as TenantConfig | null;
+          const toggle = (name: string, label: string, on: boolean, hint: string) => (
+            <label className="flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                name={name}
+                defaultChecked={on}
+                className="mt-0.5"
+              />
+              <span>
+                {label}
+                <span className="block text-xs text-muted-foreground/70">{hint}</span>
+              </span>
+            </label>
+          );
+          return (
+            <form action={saveTenantAbilities} className="mt-3 space-y-3">
+              <input type="hidden" name="id" value={row.id} />
+              {toggle(
+                "transfer_enabled",
+                "Live transfer to a human",
+                cfg?.transfer.enabled ?? false,
+                "Connects the caller to the transfer number when they ask for a person.",
+              )}
+              {toggle(
+                "booking_enabled",
+                "Book calls",
+                cfg?.booking.discoveryCall.enabled ?? false,
+                "Offers times and books the discovery/demo call.",
+              )}
+              {toggle(
+                "job_enabled",
+                "Book on-site jobs (trades)",
+                cfg?.booking.job.enabled ?? false,
+                "Books a service visit — for trades tenants.",
+              )}
+              <p className="text-xs text-muted-foreground/60">
+                Lead capture is always on — Scarlett takes details whenever a
+                caller can&apos;t be fully helped.
+              </p>
+              <Button type="submit">Save abilities</Button>
+            </form>
+          );
+        })()}
       </Section>
 
       <Section title="Integrations (per-tenant)">
