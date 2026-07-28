@@ -18,6 +18,7 @@ export const TenantConfigSchema = z.object({
   agentName: z.string().min(1),
   agentGender: z.string(),
   founderPreferredName: z.string().optional(),
+  persona: z.enum(["receptionist", "sales"]).optional(),
   timezone: z.string().min(1),
   businessHours: z.object({
     note: z.string().optional(),

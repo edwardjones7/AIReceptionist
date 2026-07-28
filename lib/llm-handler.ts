@@ -4,7 +4,11 @@
 import { env } from "./env";
 import { verifyVapiSecret } from "./auth";
 import { resolveTenant } from "./context";
-import { buildSystemPrompt, buildFounderPrompt } from "./personas/scarlett";
+import {
+  buildSystemPrompt,
+  buildFounderPrompt,
+  buildSalesPrompt,
+} from "./personas/scarlett";
 import { clientToolsFor, founderToolsFor } from "./tools";
 import { isOwnerNumber } from "./founder";
 import { getStats } from "./stats";
@@ -55,7 +59,9 @@ export async function handleLlm(req: Request): Promise<Response> {
 
   const systemStable = founder
     ? buildFounderPrompt(tenant)
-    : buildSystemPrompt(tenant);
+    : tenant.persona === "sales"
+      ? buildSalesPrompt(tenant)
+      : buildSystemPrompt(tenant);
 
   const volatileParts = [`Current date and time (${tenant.timezone}): ${nowSpoken}.`];
   if (!founder && callerNumber) volatileParts.push(`Caller's number: ${callerNumber}.`);

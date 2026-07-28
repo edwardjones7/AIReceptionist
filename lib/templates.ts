@@ -6,8 +6,9 @@ import { parseTenantConfig } from "./config-schema";
 import type { TenantConfig } from "./types";
 import elenos from "@/config/elenos.tenant.json";
 import trades from "@/config/trades.tenant.json";
+import elenosDemo from "@/config/elenos-demo.tenant.json";
 
-const TEMPLATES: Record<string, unknown> = { elenos, trades };
+const TEMPLATES: Record<string, unknown> = { elenos, trades, "elenos-demo": elenosDemo };
 
 export function templateIds(): string[] {
   return Object.keys(TEMPLATES);
