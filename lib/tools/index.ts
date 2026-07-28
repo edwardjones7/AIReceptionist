@@ -49,7 +49,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "book_discovery_call",
     description:
-      "Book the discovery call onto the calendar. Only call this AFTER reading the phone, email, and chosen time back to the caller and getting confirmation. slot_start must be one of the ISO times returned by check_availability.",
+      "Book the discovery call onto the calendar. Only call this AFTER confirming details with the caller — spell the email back letter by letter and read the phone and chosen time back — and getting their yes. slot_start must be one of the ISO times returned by check_availability.",
     parameters: {
       type: "object",
       properties: {
@@ -72,7 +72,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "capture_lead",
     description:
-      "Save the caller's details when they aren't ready to book, ask something you can't fully help with, or it's a time-sensitive matter after hours. Read contact details back before calling. Set qualified=true if they described a real need and a budget signal.",
+      "Save the caller's details when they aren't ready to book, ask something you can't fully help with, or it's a time-sensitive matter after hours. Spell any email back letter by letter and read the phone back before calling. Set qualified=true if they described a real need and a budget signal.",
     parameters: {
       type: "object",
       properties: {
