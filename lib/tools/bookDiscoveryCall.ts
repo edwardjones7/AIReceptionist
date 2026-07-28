@@ -5,12 +5,43 @@ import { alertOwner } from "../notify";
 import type { ToolContext, ToolResult } from "../types";
 import { spokenTime } from "./checkAvailability";
 
+/** "Wednesday, Jul 29, 2026 · 10:30 AM EDT" — matches the site's booking notification. */
+function whenLabel(iso: string, timezone: string): string {
+  const d = new Date(iso);
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  }).format(d);
+  return `${date} · ${time}`;
+}
+
+/** Pull a Meet link out of the external /book response, whatever key it uses. */
+function meetLink(booking: Record<string, unknown> | undefined): string {
+  if (!booking) return "";
+  for (const key of ["meet_url", "meetUrl", "meet_link", "meetLink", "hangout_link", "hangoutLink", "meet"]) {
+    const v = booking[key];
+    if (typeof v === "string" && v.startsWith("http")) return v;
+  }
+  return "";
+}
+
 export async function bookDiscoveryCall(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const name = String(input.name ?? "").trim();
-  const phone = String(input.phone ?? "").trim();
+  // Callers rarely dictate their number — fall back to the caller ID.
+  const phone = String(input.phone ?? "").trim() || (ctx.callerNumber ?? "").trim();
   const email = String(input.email ?? "").trim();
   const slotStart = String(input.slot_start ?? "").trim();
 
@@ -40,10 +71,13 @@ export async function bookDiscoveryCall(
         isError: true,
       };
     }
+    // This message lands in the site's own "📅 New booking" notification as
+    // the Notes field, so credit the assistant and keep the caller's number.
+    const bookedVia = `Booked by phone through ${ctx.tenant.agentName} (AI receptionist demo).`;
     const result = await createExternalBooking(dc.api.baseUrl, {
       name,
       email,
-      message: phone ? `Booked by phone. Caller: ${phone}` : "Booked by phone.",
+      message: phone ? `${bookedVia} Caller: ${phone}` : bookedVia,
       slot: slotStart,
       timezone: ctx.tenant.timezone,
     });
@@ -86,12 +120,18 @@ export async function bookDiscoveryCall(
     });
 
     const bookedWhen = spokenTime(start.toISOString(), ctx.tenant.timezone);
+    const startsAt = String(result.booking?.starts_at ?? start.toISOString());
+    const meet = meetLink(result.booking);
     await alertOwner(ctx.settings, {
-      title: "New discovery call booked",
-      summary: `${name} booked a ${dc.name} for ${bookedWhen}.`,
+      title: "📅 New booking",
+      summary: `${name} booked a ${dc.name} through ${ctx.tenant.agentName}.`,
       fields: [
+        { name: "Name", value: name },
         { name: "Phone", value: phone || "—" },
         { name: "Email", value: email || "—" },
+        { name: "When", value: whenLabel(startsAt, ctx.tenant.timezone) },
+        { name: "Meet", value: meet || "—" },
+        { name: "Notes", value: bookedVia },
       ],
       smsBody: `📅 Discovery call booked: ${name} — ${bookedWhen}. ${phone}`,
     });
@@ -163,11 +203,14 @@ export async function bookDiscoveryCall(
 
   const when = spokenTime(start.toISOString(), ctx.tenant.timezone);
   await alertOwner(ctx.settings, {
-    title: "New discovery call booked",
-    summary: `${name} booked a ${dc.name} for ${when}.`,
+    title: "📅 New booking",
+    summary: `${name} booked a ${dc.name} through ${ctx.tenant.agentName}.`,
     fields: [
+      { name: "Name", value: name },
       { name: "Phone", value: phone || "—" },
       { name: "Email", value: email || "—" },
+      { name: "When", value: whenLabel(start.toISOString(), ctx.tenant.timezone) },
+      { name: "Notes", value: `Booked by phone through ${ctx.tenant.agentName} (AI receptionist).` },
     ],
     smsBody: `📅 Discovery call booked: ${name} — ${when}. ${phone}`,
   });
