@@ -1,7 +1,7 @@
 import { createEvent, isSlotFree } from "../google-calendar";
 import { createExternalBooking } from "../booking-api";
 import { db } from "../supabase";
-import { alertOwner, sendSms } from "../notify";
+import { alertOwner, textCaller } from "../notify";
 import { parseSpokenEmail, isValidEmail } from "../email/spoken";
 import { getVerifiedEmail } from "../email/verified-store";
 import type { ToolContext, ToolResult } from "../types";
@@ -84,10 +84,10 @@ async function textCallerConfirmation(
   ctx: ToolContext,
   o: { when: string; email: string },
 ): Promise<void> {
-  const to = (ctx.callerNumber ?? "").trim();
-  if (!to || to === ctx.settings.notifyPhone) return;
-  const dest = o.email ? ` The invite is going to ${o.email} — if that's not right, just reply here with the correct address.` : "";
-  await sendSms(to, `You're booked for ${o.when}.${dest} — ${ctx.tenant.displayName}`);
+  const dest = o.email
+    ? ` The invite is going to ${o.email} — if that's not right, just reply here with the correct address.`
+    : "";
+  await textCaller(ctx, `You're booked for ${o.when}.${dest} — ${ctx.tenant.displayName}`);
 }
 
 export async function bookDiscoveryCall(

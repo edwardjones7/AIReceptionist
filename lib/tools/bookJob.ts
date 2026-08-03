@@ -1,5 +1,5 @@
 import { db } from "../supabase";
-import { alertOwner } from "../notify";
+import { alertOwner, textCaller } from "../notify";
 import type { ToolContext, ToolResult } from "../types";
 
 // DORMANT for Elenos. This is the trades-client template flow — booking an
@@ -58,8 +58,17 @@ export async function bookJob(
     smsBody: `🛠️ Job: ${name} — ${jobType} (${urgency}). ${address}. ${phone}`,
   });
 
+  // Same written confirmation the discovery-call path sends, so every booking
+  // across every tenant leaves the caller with a record they can reply to.
+  await textCaller(
+    ctx,
+    `Thanks for calling ${ctx.tenant.displayName} — we've got your ${jobType} request` +
+      `${address ? ` at ${address}` : ""} and someone will reach out to confirm a time. ` +
+      `Reply here if anything needs changing.`,
+  );
+
   return {
-    message: `Got it — a ${jobType} request${urgency ? `, marked ${urgency}` : ""}. Someone will reach out to confirm a time. Anything else?`,
+    message: `Got it — a ${jobType} request${urgency ? `, marked ${urgency}` : ""}. Someone will reach out to confirm a time, and I'm texting you a copy. Anything else?`,
     data: { captured: true },
   };
 }

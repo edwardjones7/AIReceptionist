@@ -11,10 +11,46 @@ import { verifyVapiSecret } from "@/lib/auth";
 import { resolveTenant } from "@/lib/context";
 import { getVapiCall } from "@/lib/vapi";
 import { storeCall, type StructuredLead } from "@/lib/call-store";
-import { postDiscord } from "@/lib/notify";
+import { postDiscord, sendSms } from "@/lib/notify";
+import { isOwnerNumber } from "@/lib/founder";
+import type { TenantConfig, TenantSettings } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/**
+ * Text a caller who did NOT book, with a link to book themselves.
+ *
+ * Best-effort and heavily gated: it needs a configured publicUrl, a caller ID,
+ * a non-booked outcome, and a caller who isn't the owner. A booked caller
+ * already got their confirmation text at booking time, so they're skipped here.
+ */
+async function textCallerFollowUp(o: {
+  outcome: string;
+  callerNumber: string;
+  tenant: TenantConfig;
+  settings: TenantSettings;
+}): Promise<void> {
+  try {
+    const url = o.tenant.booking.discoveryCall.publicUrl;
+    const to = o.callerNumber.trim();
+    if (!url || !to) return;
+    if (o.outcome === "booked") return;
+    if (to === o.settings.notifyPhone) return;
+    if (isOwnerNumber(to, o.settings.ownerNumbers)) return;
+
+    await sendSms(
+      to,
+      `Thanks for trying ${o.tenant.agentName} — ${o.tenant.displayName}. ` +
+        `If you'd like to grab a time, you can book here: ${url} ` +
+        `(or just reply to this text).`,
+    );
+  } catch (e) {
+    // Never let a follow-up text fail the webhook — Vapi would retry the whole
+    // end-of-call report and we'd double-store the call.
+    console.error("textCallerFollowUp failed", e);
+  }
+}
 
 interface VapiWebhookBody {
   message?: {
@@ -101,6 +137,17 @@ export async function POST(req: NextRequest) {
     summary,
     transcript,
     structured: msg.analysis?.structuredData,
+  });
+
+  // Didn't book? Send a self-serve link. This is the only place the outcome is
+  // actually known — mid-call we can't tell a browser from a buyer. Opt-in per
+  // tenant via booking.discoveryCall.publicUrl, so a trades client's customers
+  // never get marketing texts.
+  await textCallerFollowUp({
+    outcome,
+    callerNumber: msg.call?.customer?.number ?? "",
+    tenant: resolved.config,
+    settings: resolved.settings,
   });
 
   await postDiscord(resolved.settings.discordWebhookUrl, {

@@ -39,6 +39,10 @@ export interface TenantConfig {
       // writing Google Calendar directly, so voice and web bookings are one
       // system (same slots, same confirmation email/Meet/invite).
       api?: { baseUrl: string };
+      // Public self-serve booking page. When set, a caller who hangs up
+      // WITHOUT booking gets a follow-up text with this link. Opt-in per
+      // tenant: leave unset and no follow-up is sent.
+      publicUrl?: string;
     };
     job: {
       enabled: boolean;

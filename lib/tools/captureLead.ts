@@ -1,5 +1,5 @@
 import { db } from "../supabase";
-import { alertOwner, postDiscord } from "../notify";
+import { alertOwner, postDiscord, textCaller } from "../notify";
 import { parseSpokenEmail } from "../email/spoken";
 import { getVerifiedEmail } from "../email/verified-store";
 import type { ToolContext, ToolResult } from "../types";
@@ -61,9 +61,21 @@ export async function captureLead(
     });
   }
 
+  // No usable email but we do have their number — text them so the address can
+  // come back over SMS, where it can't be misheard. This is the promise the
+  // assistant makes when email capture is abandoned on the phone; the reply
+  // lands in Discord via /api/sms/inbound.
+  if (!email) {
+    await textCaller(
+      ctx,
+      `Thanks for calling ${ctx.tenant.displayName} — we couldn't quite catch your email on the line. ` +
+        `Just reply here with it and we'll get your invite sent over.`,
+    );
+  }
+
   return {
     message:
       "Got it — I've taken your details and someone will reach out. Anything else I can help with?",
-    data: { captured: true, qualified },
+    data: { captured: true, qualified, textedCaller: !email && Boolean(ctx.callerNumber) },
   };
 }

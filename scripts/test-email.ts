@@ -92,8 +92,24 @@ const CASES: Case[] = [
   { input: "MATT@GMAIL.COM.", email: "matt@gmail.com" },
   { input: "matt @ gmail.com", email: "matt@gmail.com" },
 
+  // ── bare provider, no TLD: what callers actually say ──
+  {
+    input: "jim at gmail",
+    email: "jim@gmail.com",
+    corrected: ["gmail", "gmail.com"],
+    note: "GOLDEN — dropped TLD sent a real caller round the re-ask loop",
+  },
+  { input: "sarah at yahoo", email: "sarah@yahoo.com", corrected: ["yahoo", "yahoo.com"] },
+  { input: "tom at comcast", email: "tom@comcast.net", corrected: ["comcast", "comcast.net"] },
+  { input: "ed at gmale", email: "ed@gmail.com", corrected: ["gmale", "gmail.com"] },
+  { input: "jim at gmail dot", email: "jim@gmail.com", note: "trailing 'dot' with nothing after" },
+
   // ── must refuse ──
-  { input: "sarah at yahoo", valid: false, note: "no TLD — must not book" },
+  {
+    input: "jim at jimsplumbing",
+    valid: false,
+    note: "unknown bare domain — .com vs .net is a guess, so ask",
+  },
   { input: "uhh I don't know", valid: false },
   { input: "", valid: false },
 ];

@@ -29,7 +29,8 @@
       "description": "A free, no-pressure call with Ed — he looks at how your calls come in now and gets an AI receptionist set up for your business. Ed does all the setup; you don't touch anything.",
       "offerWindowDays": 10,
       "earliestHoursOut": 2,
-      "api": { "baseUrl": "https://admin.elenos.ai" }
+      "api": { "baseUrl": "https://admin.elenos.ai" },
+      "publicUrl": "https://elenos.ai/book"
     },
     "job": {
       "enabled": false,

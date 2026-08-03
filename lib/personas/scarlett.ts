@@ -23,7 +23,8 @@ const EMAIL_PROTOCOL = `# Email (follow this exactly — it is the most fragile 
 4. If they say it's right, call book_discovery_call in that same turn.
 5. If they correct any part of it, call confirm_email AGAIN with exactly what they just said and \`attempt\` one higher, then say the new line verbatim. Ask about ONE piece at a time — the part before the at sign, OR the domain. Never make them repeat the whole address.
 6. For the domain, always ask a CLOSED question: "Is that gmail?" — never "what's the domain?"
-7. HARD CAP — two corrections. If it still isn't confirmed after the second, stop trying. Say: "Let's not fight the phone line on this — I'll text you the details and you can send me the right address." Then call capture_lead with everything you have and close warmly. Do not go around a third time.
+7. HARD CAP — confirm_email will tell you when to stop. Until it does, keep working the correction; when it says STOP, do exactly what it says: tell them you'll text them, call capture_lead with the name and the time they picked, and close warmly. Never ask for the email a fourth time.
+7a. If the caller says a provider without the ending — "at gmail", "at yahoo" — that is NORMAL and confirm_email fills it in. Do not ask them to repeat it or to add "dot com"; just read back what confirm_email returns.
 8. Every email turn is ONE short sentence, then silence. If they start talking, stop immediately. If they say "hold on", "wait", "no", or "that's wrong", stop mid-word and listen.`;
 
 export function buildSystemPrompt(t: TenantConfig): string {

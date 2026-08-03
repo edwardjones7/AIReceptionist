@@ -4,6 +4,35 @@ import type { ToolContext, ToolResult } from "../types";
 
 // Format an ISO instant as a spoken time in the tenant timezone, e.g.
 // "Tuesday, June 17th at 2:00 PM".
+// Prepended to every list of offered slots. The relative-day rule is load-
+// bearing: the model reliably mislabels an offered date ("Tuesday the 4th"
+// becomes "tomorrow"), and a caller who hears a day that is actually booked
+// solid loses all trust in the rest of the call.
+const OFFER_RULES =
+  "Open times. Offer these to the caller by their friendly day and time only — " +
+  "do NOT read the slot_start values aloud. Say the day and date EXACTLY as " +
+  'written here (e.g. "Tuesday the 4th at 10"). NEVER translate one into a ' +
+  'relative day like "tomorrow", "today", or "later this week" — you will get ' +
+  "it wrong. Any day NOT listed below has no openings at all; if the caller " +
+  "asks for one, say it's fully booked and offer what's here. When the caller " +
+  "picks one, call book_discovery_call with that option's slot_start exactly:";
+
+// Today's date, restated immediately next to the slots. The system prompt
+// already carries the current time, but a small model will still drift when it
+// has to do date arithmetic across a tool boundary — repeating the anchor here,
+// touching the data, is what keeps "Tuesday the 4th" from becoming "tomorrow".
+function todayLine(timezone: string): string {
+  const today = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
+  return `For your reference, TODAY is ${today}. None of the times below are today or tomorrow unless the date literally matches.`;
+}
+
+// Format an ISO instant as a spoken time in the tenant timezone, e.g.
+// "Tuesday, June 17th at 2:00 PM".
 export function spokenTime(iso: string, timezone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -42,7 +71,7 @@ export async function checkAvailability(
           `${i + 1}) ${spokenTime(start, ctx.tenant.timezone)} — slot_start=${start}`,
       );
       return {
-        message: `Open times. Offer these to the caller by their friendly time only — do NOT read the slot_start values aloud. When the caller picks one, call book_discovery_call with that option's slot_start value exactly:\n${lines.join("\n")}`,
+        message: `${todayLine(ctx.tenant.timezone)}\n\n${OFFER_RULES}\n${lines.join("\n")}`,
         data: { slots: iso.map((start) => ({ start })) },
       };
     } catch (e) {
@@ -95,7 +124,7 @@ export async function checkAvailability(
       `${i + 1}) ${spokenTime(s.start, ctx.tenant.timezone)} — slot_start=${s.start}`,
   );
   return {
-    message: `Open times. Offer these to the caller by their friendly time only — do NOT read the slot_start values aloud. When the caller picks one, call book_discovery_call with that option's slot_start value exactly:\n${lines.join("\n")}`,
+    message: `${todayLine(ctx.tenant.timezone)}\n\n${OFFER_RULES}\n${lines.join("\n")}`,
     data: { slots },
   };
 }

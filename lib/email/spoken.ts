@@ -46,6 +46,23 @@ export const TOP_DOMAINS = [
 /** Second-level labels of TOP_DOMAINS — spoken as words in the read-back. */
 const TOP_SLDS = new Set(TOP_DOMAINS.map((d) => d.split(".")[0]));
 
+// Bare provider name -> full domain. People say "jim at gmail" and leave the
+// TLD implied constantly, and speech-to-text drops a trailing "dot com" just as
+// often. Rejecting those outright sent real callers around the re-ask loop
+// until the attempt cap gave up on booking them, so complete the obvious ones.
+// Only well-known providers: "jimsplumbing" with no TLD is genuinely ambiguous
+// (.com? .net?) and must still fail.
+// "me" is excluded (too generic a word), and "ymail" because it sits one edit
+// from "gmail" — keeping it only creates ties that block gmail typo repair,
+// and ymail.com is vanishingly rare by comparison. Both still match in full
+// "…dot com" form via the normal domain path.
+const BARE_SLD_TO_DOMAIN: Record<string, string> = Object.fromEntries(
+  TOP_DOMAINS.filter((d) => d !== "me.com" && d !== "ymail.com").map((d) => [
+    d.split(".")[0],
+    d,
+  ]),
+);
+
 // NATO alphabet. Deliberately includes the common misspellings/variants callers
 // and Deepgram produce. Only applied in spelling mode — see parseSpokenEmail.
 const NATO: Record<string, string> = {
@@ -145,6 +162,30 @@ export function correctDomain(domain: string): {
   const d = domain.toLowerCase();
   if (!d) return { domain: d };
   if ((TOP_DOMAINS as readonly string[]).includes(d)) return { domain: d };
+
+  // "gmail" -> "gmail.com", "comcast" -> "comcast.net". Surfaced as a
+  // correction so the assistant confirms it rather than assuming.
+  if (!d.includes(".") && BARE_SLD_TO_DOMAIN[d]) {
+    return { domain: BARE_SLD_TO_DOMAIN[d], corrected: { from: d, to: BARE_SLD_TO_DOMAIN[d] } };
+  }
+
+  // No TLD and not an exact provider match — try a fuzzy hit on the bare name
+  // ("gmale" -> gmail.com) before falling through to full-domain matching.
+  if (!d.includes(".")) {
+    const slds = Object.keys(BARE_SLD_TO_DOMAIN);
+    const ranked = slds.map((s) => ({ s, dist: levenshtein(d, s) })).sort((a, b) => a.dist - b.dist);
+    const top = ranked[0];
+    const second = ranked[1];
+    // Short names (aol, msn, att, live) stay at 1 edit — they're close enough
+    // to each other and to ordinary words that 2 would invent matches.
+    const budget = top && top.s.length <= 4 ? 1 : 2;
+    if (top && top.dist <= budget && (!second || second.dist > top.dist)) {
+      const full = BARE_SLD_TO_DOMAIN[top.s];
+      return { domain: full, corrected: { from: d, to: full } };
+    }
+    // Unknown bare name (a company domain) — leave it; validation will reject.
+    return { domain: d };
+  }
 
   const scored = TOP_DOMAINS.map((t) => ({ t, dist: levenshtein(d, t) })).sort(
     (a, b) => a.dist - b.dist,

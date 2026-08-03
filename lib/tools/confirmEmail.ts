@@ -11,7 +11,11 @@ import type { ToolContext, ToolResult } from "../types";
 // The returned `message` has to carry its own instructions: app/api/tools/route
 // forwards only this string to the model, so anything not in it is lost.
 
-const MAX_ATTEMPTS = 3;
+// Three tries before giving up, not two. The cap exists so a caller isn't stuck
+// in a loop — but hitting it costs a booking, so it should be genuinely last
+// resort. Most of what used to trip it was the parser rejecting "jim at gmail";
+// that's fixed, and the extra attempt buys margin for the rest.
+const MAX_ATTEMPTS = 4;
 
 export async function confirmEmail(
   input: Record<string, unknown>,
@@ -35,8 +39,11 @@ export async function confirmEmail(
   if (!parsed.valid && attempt >= MAX_ATTEMPTS) {
     return {
       message:
-        'STOP — two corrections is the cap and it has been reached. Do NOT ask for the email again. Say EXACTLY: "Let\'s not fight the phone line on this — I\'ll text you the details and you can send me the right address." Then call capture_lead with the name and everything else you have, and close warmly.',
-      data: { valid: false, attempt, raw: parsed.raw },
+        "STOP asking for the email — the line clearly isn't carrying it. Do NOT ask again. " +
+        'Say EXACTLY: "Let\'s not fight the phone line on this — I\'ll text you, just reply with your email ' +
+        'and I\'ll hold that time for you." Then call capture_lead with the name, the time they picked, ' +
+        "and everything else you have. Tell them the time is held and they will get a text — do not imply they are fully booked.",
+      data: { valid: false, attempt, raw: parsed.raw, capped: true },
       isError: true,
     };
   }

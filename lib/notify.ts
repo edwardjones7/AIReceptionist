@@ -6,7 +6,7 @@
 // sending credentials/number stay global.
 
 import { env } from "./env";
-import type { TenantSettings } from "./types";
+import type { TenantSettings, ToolContext } from "./types";
 
 export async function postDiscord(
   webhookUrl: string,
@@ -71,6 +71,24 @@ export async function sendSms(to: string, body: string): Promise<void> {
   } catch (e) {
     console.error("sendSms failed", e);
   }
+}
+
+/**
+ * Text the CALLER on the number they rang in from (as opposed to alertOwner,
+ * which texts the business).
+ *
+ * Every booking path should end with one of these: it gives the caller a
+ * written record of what was agreed, and — critically — puts any address we
+ * captured in front of them while they can still correct it. Replies come back
+ * through /api/sms/inbound.
+ *
+ * No-ops when there's no caller ID, or when the caller IS the owner (founder
+ * mode testing), so it can be called unconditionally.
+ */
+export async function textCaller(ctx: ToolContext, body: string): Promise<void> {
+  const to = (ctx.callerNumber ?? "").trim();
+  if (!to || to === ctx.settings.notifyPhone) return;
+  await sendSms(to, body);
 }
 
 // Alert the tenant's owner on a hot lead / urgent matter via both channels.
