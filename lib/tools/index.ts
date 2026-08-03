@@ -6,6 +6,7 @@
 
 import type { TenantConfig, ToolContext, ToolResult } from "../types";
 import { checkAvailability } from "./checkAvailability";
+import { confirmEmail } from "./confirmEmail";
 import { bookDiscoveryCall } from "./bookDiscoveryCall";
 import { captureLead } from "./captureLead";
 import { bookJob } from "./bookJob";
@@ -47,22 +48,51 @@ export const TOOLS: ToolDef[] = [
     enabledFor: (t) => t.booking.discoveryCall.enabled,
   },
   {
+    name: "confirm_email",
+    description:
+      "Normalize an email the caller just said and get back the EXACT words to read to them. Call this the moment you hear an email, and again after every correction — always before book_discovery_call or capture_lead. Read the returned line back VERBATIM. Never invent your own spelling or 'as in' words.",
+    parameters: {
+      type: "object",
+      properties: {
+        heard: {
+          type: "string",
+          description:
+            "Exactly what you heard, verbatim — including 'at', 'dot', any letters they spelled out, and any 'as in' words. Do NOT clean it up, fix it, or guess.",
+        },
+        attempt: {
+          type: "integer",
+          description: "1 on the first try, 2 after one correction, 3 after two.",
+        },
+      },
+      required: ["heard"],
+      additionalProperties: false,
+    },
+    handler: confirmEmail,
+    audience: "client",
+    enabledFor: () => true,
+  },
+  {
     name: "book_discovery_call",
     description:
-      "Book the discovery call onto the calendar. Only call this AFTER confirming details with the caller — spell the email back letter by letter and read the phone and chosen time back — and getting their yes. slot_start must be one of the ISO times returned by check_availability.",
+      "Book the discovery call onto the calendar. Only call this AFTER confirm_email has come back valid AND the caller has agreed to the read-back. slot_start must be one of the ISO times returned by check_availability.",
     parameters: {
       type: "object",
       properties: {
         name: { type: "string", description: "Caller's full name" },
         phone: { type: "string", description: "Caller's phone number" },
-        email: { type: "string", description: "Caller's email address" },
+        email: {
+          type: "string",
+          description:
+            "The EXACT address confirm_email returned — lowercase, no spaces. Do not retype it from memory.",
+          pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$",
+        },
         slot_start: {
           type: "string",
           description:
             "ISO 8601 start time of the chosen slot, exactly as returned by check_availability",
         },
       },
-      required: ["name", "slot_start"],
+      required: ["name", "email", "slot_start"],
       additionalProperties: false,
     },
     handler: bookDiscoveryCall,
@@ -72,7 +102,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "capture_lead",
     description:
-      "Save the caller's details when they aren't ready to book, ask something you can't fully help with, or it's a time-sensitive matter after hours. Spell any email back letter by letter and read the phone back before calling. Set qualified=true if they described a real need and a budget signal.",
+      "Save the caller's details when they aren't ready to book, ask something you can't fully help with, or it's a time-sensitive matter after hours. If they give an email, run it through confirm_email first and pass the exact address it returned — do not retype it from memory. Read the phone back before calling. Set qualified=true if they described a real need and a budget signal.",
     parameters: {
       type: "object",
       properties: {

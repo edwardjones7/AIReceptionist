@@ -118,6 +118,20 @@ function sseChunk(obj: unknown): string {
 
 const enc = new TextEncoder();
 
+// Newer Claude models REJECT temperature/top_p/top_k with a 400 — the sampling
+// parameters were removed starting with Opus 4.7. Haiku 4.5 (our default) still
+// accepts them, and a lower temperature measurably helps with "say this string
+// back verbatim", which is exactly what confirm_email asks of it. So send it
+// only where it's legal, and keep the escape hatch of switching a tenant to a
+// newer model without a 400.
+const NO_SAMPLING_PARAMS = /^claude-(opus-(4-7|4-8|5)|sonnet-5|fable|mythos)/;
+
+function samplingFor(model: string): { temperature?: number } {
+  if (NO_SAMPLING_PARAMS.test(model)) return {};
+  const t = Number(env.llmTemperature);
+  return Number.isFinite(t) ? { temperature: t } : {};
+}
+
 // Stream a Claude response back as OpenAI chat.completion.chunk SSE events.
 export function streamClaudeAsOpenAI(opts: {
   model: string;
@@ -155,6 +169,7 @@ export function streamClaudeAsOpenAI(opts: {
         const stream = anthropic().messages.stream({
           model: opts.model,
           max_tokens: 1024,
+          ...samplingFor(opts.model),
           system: [
             {
               type: "text",

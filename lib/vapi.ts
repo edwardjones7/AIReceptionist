@@ -86,6 +86,33 @@ const LEAD_ANALYSIS_PLAN = {
   },
 };
 
+// Deepgram nova-3 keyterm prompting, aimed squarely at email dictation.
+//
+// Boosts WORDS, so it helps with domains, separators and phonetic alphabet
+// words — it does nothing for b/d/e/g/p/t/v/z confusion over an 8 kHz phone
+// line, which is why the parser and the confirm_email loop carry more weight.
+// Deliberately excludes bare "at" and single letters: boosting common function
+// words causes over-triggering across the whole call.
+const EMAIL_KEYTERMS = [
+  // domains and their bare second-level labels
+  "gmail.com", "gmail", "yahoo.com", "yahoo", "outlook.com", "outlook",
+  "hotmail.com", "hotmail", "icloud.com", "icloud", "aol.com", "aol",
+  "comcast.net", "verizon.net", "protonmail.com", "me.com", "live.com",
+  "msn.com", "sbcglobal.net", "att.net", "ymail.com",
+  // TLDs as spoken
+  "dot com", "dot net", "dot org", "dot co", "dot io", "dot ai", "dot us",
+  // separators and dictation hints (multi-word forms only)
+  "at sign", "at symbol", "underscore", "hyphen", "dash", "period", "plus sign",
+  "all one word", "no spaces", "all lowercase", "capital",
+  // NATO — callers reach for it under pressure
+  "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel",
+  "india", "juliet", "kilo", "lima", "november", "oscar", "papa", "quebec",
+  "romeo", "sierra", "tango", "uniform", "victor", "whiskey", "x-ray", "yankee",
+  "zulu",
+  // name suffixes — the exact word that got dropped on 2026-07-31
+  "junior", "senior",
+];
+
 // Per-tenant TTS voice. `version: 2` is a vapi-provider-only field.
 function buildVoice(config: TenantConfig): Record<string, unknown> {
   const provider = config.voice.provider ?? "vapi";
@@ -140,6 +167,20 @@ export function buildAssistantPayload(
       provider: "deepgram",
       model: "nova-3",
       language: "en",
+      // nova-3 + en only. Never send `keywords` alongside this.
+      keyterm: EMAIL_KEYTERMS,
+      // ms of silence before Deepgram finalizes an utterance. The default (~10)
+      // chops a spelled-out address into separate transcripts.
+      endpointing: 300,
+      // Turn off provider-side "helpfulness" — normalization is ours, in
+      // lib/email/spoken.ts, where it's deterministic and unit-tested.
+      // smartFormat adds punctuation that corrupts letter runs ("M.A.T.T.");
+      // numerals rewrites "to"→2 / "for"→4 / "ate"→8.
+      smartFormat: false,
+      numerals: false,
+      // Pinned at Vapi's default ON PURPOSE. Raising it looks like a quality
+      // knob but silently DROPS dictated letters, which score low by nature.
+      confidenceThreshold: 0.4,
     },
     voice: buildVoice(config),
     server: {
@@ -153,6 +194,71 @@ export function buildAssistantPayload(
     // Live call control → monitor.controlUrl on tool-call webhooks — required
     // for the transfer_call handler to bridge the call.
     monitorPlan: { controlEnabled: true, listenEnabled: true },
+    // Krisp-based removal of background speech (car, shop, TV). Biggest
+    // single-line transcript-quality win for callers on mobile.
+    backgroundSpeechDenoisingPlan: { smartDenoisingPlan: { enabled: true } },
+    // When to start talking. People pause BETWEEN LETTERS when spelling; the
+    // stock ~0.4s endpointing fires into those gaps and the assistant ends up
+    // answering half an address. That is the most likely reason a "j r" suffix
+    // went missing on the 2026-07-31 demo call.
+    startSpeakingPlan: {
+      waitSeconds: 0.6,
+      smartEndpointingPlan: { provider: "livekit", waitFunction: "700 + 4000 * x" },
+      transcriptionEndpointingPlan: {
+        onPunctuationSeconds: 0.3,
+        onNoPunctuationSeconds: 1.8, // spelling has no punctuation
+        onNumberSeconds: 0.7,
+      },
+      // These override the smart plan when they match — most specific first.
+      customEndpointingRules: [
+        // We just asked them to spell something: be very patient.
+        {
+          type: "assistant",
+          regex: "spell|letter by letter|one letter at a time|part before the at sign",
+          regexOptions: [{ type: "ignore-case", enabled: true }],
+          timeoutSeconds: 4.5,
+        },
+        // The caller is visibly mid-spelling — transcript ends in a run of
+        // single letters. This is the rule that would have saved that call.
+        {
+          type: "customer",
+          regex: "(\\b[a-z]\\b[ ,.]+){2,}\\b[a-z]\\b[ ,.]*$",
+          regexOptions: [{ type: "ignore-case", enabled: true }],
+          timeoutSeconds: 4.0,
+        },
+        // They've said "at" and haven't reached the domain yet.
+        {
+          type: "customer",
+          regex: "\\b(at|at sign|at symbol|@)\\s*$",
+          regexOptions: [{ type: "ignore-case", enabled: true }],
+          timeoutSeconds: 3.0,
+        },
+        // We asked for an email at all.
+        {
+          type: "assistant",
+          regex: "e-?mail|email address|best email|invite to",
+          regexOptions: [{ type: "ignore-case", enabled: true }],
+          timeoutSeconds: 3.0,
+        },
+      ],
+    },
+    // When to shut up. numWords/voiceSeconds match Vapi's defaults — barge-in
+    // was already on when she talked over "Hold on. Pause." The real cause was
+    // 30-second turns (a 300ms cut-off still leaves 29 seconds of wrong), which
+    // the prompt's one-sentence rule fixes. Pinned here so they're explicit,
+    // and backoff is raised: after "you got it wrong" the caller keeps going.
+    stopSpeakingPlan: {
+      numWords: 0,
+      voiceSeconds: 0.2,
+      backoffSeconds: 1.4,
+      interruptionPhrases: [
+        "hold on", "hang on", "wait", "stop", "pause", "no", "nope",
+        "that's wrong", "you got it wrong", "not right", "incorrect",
+      ],
+      acknowledgementPhrases: [
+        "okay", "ok", "yeah", "yep", "uh huh", "mm hmm", "got it", "right",
+      ],
+    },
     silenceTimeoutSeconds: 30,
     maxDurationSeconds: 1800,
   };

@@ -14,6 +14,9 @@ export interface TenantConfig {
   agentGender: string;
   founderPreferredName?: string; // what the assistant calls the founder in founder mode
   persona?: "receptionist" | "sales"; // behavior mode; default receptionist
+  // Override the live-turn model for this tenant (default: LLM_MODEL env).
+  // Takes effect on the next call — no re-provision needed.
+  llmModel?: string;
   timezone: string;
   businessHours: BusinessHours;
   transfer: {

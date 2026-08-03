@@ -1,10 +1,10 @@
-// Notifications: Discord webhook (summaries + leads) and Twilio SMS (hot/urgent).
-// Both are best-effort and never throw into the call path.
+// Notifications: Discord webhook (summaries + leads) and Telnyx SMS (owner
+// alerts + caller booking confirmations). Both are best-effort and never throw
+// into the call path.
 //
-// Destinations are per-tenant (settings on the tenants row); only the Twilio
+// Destinations are per-tenant (settings on the tenants row); only the Telnyx
 // sending credentials/number stay global.
 
-import twilio from "twilio";
 import { env } from "./env";
 import type { TenantSettings } from "./types";
 
@@ -39,15 +39,35 @@ export async function postDiscord(
   }
 }
 
+/**
+ * Send an SMS via Telnyx.
+ *
+ * Silently no-ops without a from-number so a missing env var can never break a
+ * live call — but that also means a misconfiguration looks like success. A
+ * non-2xx from Telnyx is logged with the body, since carrier-level rejections
+ * (unregistered 10DLC campaign, blocked destination) only show up there.
+ */
 export async function sendSms(to: string, body: string): Promise<void> {
-  if (!to || !env.twilioPhoneNumber) return;
+  if (!to || !env.telnyxPhoneNumber) return;
   try {
-    const client = twilio(env.twilioAccountSid(), env.twilioAuthToken());
-    await client.messages.create({
-      to,
-      from: env.twilioPhoneNumber,
-      body,
+    const res = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.telnyxApiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: env.telnyxPhoneNumber,
+        to,
+        text: body,
+        ...(env.telnyxMessagingProfileId
+          ? { messaging_profile_id: env.telnyxMessagingProfileId }
+          : {}),
+      }),
     });
+    if (!res.ok) {
+      console.error("sendSms failed", res.status, await res.text().catch(() => ""));
+    }
   } catch (e) {
     console.error("sendSms failed", e);
   }

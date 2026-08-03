@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "provision": "tsx scripts/provision-assistant.ts",
     "seed": "tsx scripts/seed-tenant.ts",
-    "test:call": "tsx scripts/test-call.ts"
+    "test:call": "tsx scripts/test-call.ts",
+    "test:email": "tsx scripts/test-email.ts",
+    "audit:emails": "tsx scripts/audit-emails.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

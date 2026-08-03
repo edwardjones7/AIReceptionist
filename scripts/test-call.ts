@@ -17,6 +17,8 @@ import { config } from "dotenv";
 config({ path: ".env.local" }); // primary
 config(); // .env fallback (does not override already-set vars)
 
+import { parseSpokenEmail } from "../lib/email/spoken";
+
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
 const SECRET = process.env.VAPI_SERVER_SECRET ?? "";
 
@@ -46,6 +48,23 @@ function stubToolResult(name: string, args: Record<string, unknown>): string {
     }).format(new Date(iso));
 
   switch (name) {
+    // NOT a stub — runs the real parser so the confirm→read-back→book loop
+    // under test is the one that ships. Mirrors lib/tools/confirmEmail.ts.
+    case "confirm_email": {
+      const attempt = Number(args.attempt ?? 1) || 1;
+      const p = parseSpokenEmail(String(args.heard ?? ""));
+      if (!p.valid && attempt >= 3) {
+        return "STOP — two corrections is the cap. Say EXACTLY: \"Let's not fight the phone line on this — I'll text you the details and you can send me the right address.\" Then call capture_lead.";
+      }
+      if (!p.valid) {
+        return `NOT A VALID EMAIL (heard: "${p.raw}"). Do NOT call book_discovery_call. Ask for the part before the at sign only, then call confirm_email again with attempt ${attempt + 1}.`;
+      }
+      const alt = p.alternatives?.[0];
+      if (alt?.reason === "junior") {
+        return `Parsed: ${p.email} — VALID. Say EXACTLY this and nothing else, then STOP: "Let me read that back — ${p.spellback}. One check: is that j r on the end, or the whole word junior?"`;
+      }
+      return `Parsed: ${p.email} — VALID. Say EXACTLY this and nothing else, then STOP and wait: "Let me read that back — ${p.spellback}. Did I get it?" If they say yes, call book_discovery_call immediately with this exact address.`;
+    }
     case "check_availability": {
       // Two fake slots a couple days out, on the half hour.
       const base = new Date(Date.now() + 2 * 86_400_000);
@@ -146,7 +165,12 @@ async function callLlm(messages: Msg[]): Promise<Msg> {
 }
 
 // Run one user turn, resolving any tool calls (via stubs) until Scarlett speaks.
-async function turn(messages: Msg[], userText: string): Promise<void> {
+async function turn(
+  messages: Msg[],
+  userText: string,
+  tr?: Transcript,
+  turnIndex = 0,
+): Promise<void> {
   console.log(`\n\x1b[36m  Caller:\x1b[0m ${userText}`);
   messages.push({ role: "user", content: userText });
 
@@ -156,6 +180,7 @@ async function turn(messages: Msg[], userText: string): Promise<void> {
 
     if (assistant.content) {
       console.log(`\x1b[35mScarlett:\x1b[0m ${assistant.content}`);
+      tr?.said.push(assistant.content);
     }
     if (!assistant.tool_calls?.length) return;
 
@@ -169,6 +194,7 @@ async function turn(messages: Msg[], userText: string): Promise<void> {
       console.log(
         `\x1b[33m    ↳ tool: ${tc.function.name}(${JSON.stringify(args)})\x1b[0m`,
       );
+      tr?.toolCalls.push({ name: tc.function.name, args, turn: turnIndex });
       const result = stubToolResult(tc.function.name, args);
       messages.push({ role: "tool", tool_call_id: tc.id, content: result });
     }
@@ -179,6 +205,13 @@ async function turn(messages: Msg[], userText: string): Promise<void> {
 interface Scenario {
   caller?: string; // overrides the caller number (e.g. founder mode)
   lines: string[];
+  // Optional post-run assertions over everything that was said and called.
+  check?: (t: Transcript) => string[]; // returns failures
+}
+
+interface Transcript {
+  said: string[];
+  toolCalls: { name: string; args: Record<string, unknown>; turn: number }[];
 }
 
 const SCENARIOS: Record<string, Scenario> = {
@@ -204,6 +237,50 @@ const SCENARIOS: Record<string, Scenario> = {
     ],
   },
   human: { lines: ["Can I just talk to a real person?"] },
+  // Regression test for the 2026-07-31 demo call, where a garbled email loop
+  // ended with mattmanzi@gmail.com booked instead of mattmanzijr@gmail.com.
+  // Caller lines are the real transcript, mis-transcriptions and all.
+  email: {
+    lines: [
+      "Hi, I run a plumbing and heating company. We miss a ton of calls after hours.",
+      "Matt. Matt Manzi.",
+      "Tuesday at noon works.",
+      "Matt manzie junior at g mail dot com.",
+      "No, you got it wrong.",
+      "M a t t m a n z i j r at g m a i l dot com",
+      "Yeah, that's right.",
+    ],
+    check: (t) => {
+      const fails: string[] = [];
+      const bookings = t.toolCalls.filter((c) => c.name === "book_discovery_call");
+      const lastConfirm = t.toolCalls.map((c) => c.name).lastIndexOf("confirm_email");
+
+      if (!bookings.length) {
+        fails.push("never called book_discovery_call");
+      } else {
+        const email = String(bookings[bookings.length - 1].args.email ?? "");
+        if (email !== "mattmanzijr@gmail.com") {
+          fails.push(`booked the wrong address: "${email}" (expected mattmanzijr@gmail.com)`);
+        }
+        // The booking must come after the final confirmation, not race it.
+        const firstBookIdx = t.toolCalls.findIndex((c) => c.name === "book_discovery_call");
+        if (firstBookIdx < lastConfirm) {
+          fails.push("called book_discovery_call before the final confirm_email");
+        }
+        if (bookings[0].turn < 6) {
+          fails.push(`booked on turn ${bookings[0].turn} — before the caller confirmed`);
+        }
+      }
+      if (!t.toolCalls.some((c) => c.name === "confirm_email")) {
+        fails.push("never called confirm_email");
+      }
+      const invented = t.said.find((s) => /\bas in\b/i.test(s));
+      if (invented) fails.push(`invented phonetics: "${invented.slice(0, 80)}"`);
+      const space = t.said.find((s) => /\bspace\b/i.test(s));
+      if (space) fails.push(`said the word "space": "${space.slice(0, 80)}"`);
+      return fails;
+    },
+  },
   // Founder mode — calls from FOUNDER_CELL; expects an EA-style briefing.
   founder: {
     caller: process.env.FOUNDER_CELL,
@@ -216,9 +293,35 @@ const SCENARIOS: Record<string, Scenario> = {
   },
 };
 
+// A missing or placeholder .env.local surfaces as an opaque 500 from /api/llm
+// (the tenant lookup fails first), so check the obvious causes up front.
+function preflight(): void {
+  const problems: string[] = [];
+  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  const supabase = process.env.SUPABASE_URL ?? "";
+
+  if (!key) problems.push("ANTHROPIC_API_KEY is not set");
+  else if (key.includes("[SENSITIVE]")) problems.push("ANTHROPIC_API_KEY is a redacted placeholder");
+  if (supabase && !/^https?:\/\//.test(supabase)) {
+    problems.push(`SUPABASE_URL is not a URL ("${supabase.slice(0, 24)}")`);
+  }
+
+  if (problems.length) {
+    console.error("\n\x1b[31mEnvironment isn't usable:\x1b[0m");
+    for (const p of problems) console.error(`  · ${p}`);
+    console.error(
+      "\nPull real values first:\n" +
+        "  npx vercel env pull .env.local --environment=production --yes\n",
+    );
+    process.exit(1);
+  }
+}
+
 async function main() {
+  preflight();
   const which = process.argv[2];
   const names = which ? [which] : Object.keys(SCENARIOS);
+  let failed = false;
   for (const name of names) {
     const scenario = SCENARIOS[name];
     if (!scenario) {
@@ -232,7 +335,25 @@ async function main() {
     }
     console.log(`\n\x1b[1m══ scenario: ${name} (from ${callerNumber}) ══\x1b[0m`);
     const messages: Msg[] = [];
-    for (const userText of scenario.lines) await turn(messages, userText);
+    const tr: Transcript = { said: [], toolCalls: [] };
+    for (const [i, userText] of scenario.lines.entries()) {
+      await turn(messages, userText, tr, i);
+    }
+
+    if (scenario.check) {
+      const fails = scenario.check(tr);
+      if (fails.length) {
+        console.log(`\n\x1b[31m✗ ${name} FAILED\x1b[0m`);
+        for (const f of fails) console.log(`\x1b[31m  · ${f}\x1b[0m`);
+        failed = true;
+      } else {
+        console.log(`\n\x1b[32m✓ ${name} assertions passed\x1b[0m`);
+      }
+    }
+  }
+  if (failed) {
+    console.log("\n\x1b[31m✗ one or more scenarios failed\x1b[0m");
+    process.exit(1);
   }
   console.log("\n\x1b[32m✓ done\x1b[0m");
 }

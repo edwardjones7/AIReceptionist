@@ -92,7 +92,8 @@ export async function handleLlm(req: Request): Promise<Response> {
   // call-control URL in lib/tools/transferCall.ts; nothing special to inject here.)
 
   const stream = streamClaudeAsOpenAI({
-    model: env.llmModel,
+    // Per-tenant override wins; picked up live, no re-provision needed.
+    model: tenant.llmModel || env.llmModel,
     systemStable,
     systemVolatile,
     messages,

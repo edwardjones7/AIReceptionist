@@ -20,6 +20,9 @@ export const env = {
   // Anthropic
   anthropicApiKey: () => required("ANTHROPIC_API_KEY"),
   llmModel: optional("LLM_MODEL", "claude-haiku-4-5"),
+  // Only sent to models that still accept sampling params — see
+  // samplingFor() in lib/anthropic.ts. Lower is better for verbatim read-backs.
+  llmTemperature: optional("LLM_TEMPERATURE", "0.4"),
   summaryModel: optional("SUMMARY_MODEL", "claude-sonnet-4-6"),
 
   // Vapi
@@ -43,10 +46,18 @@ export const env = {
   googlePrivateKey: () => required("GOOGLE_PRIVATE_KEY"),
   googleCalendarId: optional("GOOGLE_CALENDAR_ID", "primary"),
 
-  // Twilio
+  // Twilio — now only for buying/importing phone numbers onto Vapi.
+  // Outbound SMS moved to Telnyx (see below).
   twilioAccountSid: () => required("TWILIO_ACCOUNT_SID"),
   twilioAuthToken: () => required("TWILIO_AUTH_TOKEN"),
   twilioPhoneNumber: optional("TWILIO_PHONE_NUMBER"),
+
+  // Telnyx — all outbound/inbound SMS.
+  telnyxApiKey: () => required("TELNYX_API_KEY"),
+  telnyxPhoneNumber: optional("TELNYX_PHONE_NUMBER"),
+  telnyxMessagingProfileId: optional("TELNYX_MESSAGING_PROFILE_ID"),
+  // Ed25519 public key from the Telnyx portal, used to verify inbound webhooks.
+  telnyxPublicKey: optional("TELNYX_PUBLIC_KEY"),
 
   // Notifications (dev fallback only — production values live per-tenant in
   // the tenants table; see lib/context.ts settingsFromEnv)

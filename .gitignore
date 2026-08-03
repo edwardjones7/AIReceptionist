@@ -22,3 +22,4 @@ gcloud-key.json
 *.tsbuildinfo
 next-env.d.ts
 .vercel
+.env*

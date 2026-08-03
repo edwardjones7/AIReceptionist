@@ -1,5 +1,7 @@
 import { db } from "../supabase";
 import { alertOwner, postDiscord } from "../notify";
+import { parseSpokenEmail } from "../email/spoken";
+import { getVerifiedEmail } from "../email/verified-store";
 import type { ToolContext, ToolResult } from "../types";
 
 export async function captureLead(
@@ -8,7 +10,11 @@ export async function captureLead(
 ): Promise<ToolResult> {
   const name = String(input.name ?? "").trim();
   const phone = String(input.phone ?? "").trim() || ctx.callerNumber || "";
-  const email = String(input.email ?? "").replace(/\s+/g, "").toLowerCase();
+  // Prefer the address the caller actually confirmed via confirm_email; fall
+  // back to parsing whatever the model passed. A lead is worth keeping even
+  // with a shaky address, so an unparseable one is stored raw rather than lost.
+  const parsedEmail = parseSpokenEmail(String(input.email ?? ""));
+  const email = getVerifiedEmail(ctx.vapiCallId) ?? parsedEmail.email;
   const intent = String(input.intent ?? "").trim();
   const details = String(input.details ?? "").trim();
   const qualified = Boolean(input.qualified);

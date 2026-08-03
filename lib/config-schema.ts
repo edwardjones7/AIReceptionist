@@ -19,6 +19,10 @@ export const TenantConfigSchema = z.object({
   agentGender: z.string(),
   founderPreferredName: z.string().optional(),
   persona: z.enum(["receptionist", "sales"]).optional(),
+  // Must exist here as well as in TenantConfig: this is a plain z.object, so
+  // unknown keys are STRIPPED, and the admin editor saves the parsed object —
+  // a type-only field would be silently deleted on the next dashboard save.
+  llmModel: z.string().optional(),
   timezone: z.string().min(1),
   businessHours: z.object({
     note: z.string().optional(),

@@ -95,10 +95,13 @@ export async function POST(req: NextRequest) {
       const result = await runTool(name, args, ctx);
       return {
         toolCallId: id,
-        // Vapi reads `result` as the string handed back to the model.
-        result: result.message,
+        // Vapi reads `result` as the string handed back to the model. With a
+        // custom LLM this arrives as a plain tool message, so a failure that
+        // reads like ordinary prose gets taken at face value — prefix it so
+        // the model can tell "done" from "rejected, try again".
+        result: result.isError ? `TOOL ERROR — ${result.message}` : result.message,
         // Extra metadata (ignored by Vapi, useful for our own logs/debugging).
-        metadata: result.data ?? {},
+        metadata: { ...(result.data ?? {}), isError: Boolean(result.isError) },
       };
     }),
   );

@@ -79,7 +79,7 @@ export async function provisionTenant(
   const payload = buildAssistantPayload(config, {
     baseUrl,
     secret: env.vapiServerSecret,
-    llmModel: env.llmModel,
+    llmModel: config.llmModel || env.llmModel,
   });
 
   // Step 1: assistant (PATCH if we already have one).

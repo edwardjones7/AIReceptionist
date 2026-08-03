@@ -1,7 +1,9 @@
 import { createEvent, isSlotFree } from "../google-calendar";
 import { createExternalBooking } from "../booking-api";
 import { db } from "../supabase";
-import { alertOwner } from "../notify";
+import { alertOwner, sendSms } from "../notify";
+import { parseSpokenEmail, isValidEmail } from "../email/spoken";
+import { getVerifiedEmail } from "../email/verified-store";
 import type { ToolContext, ToolResult } from "../types";
 import { spokenTime } from "./checkAvailability";
 
@@ -35,6 +37,59 @@ function meetLink(booking: Record<string, unknown> | undefined): string {
   return "";
 }
 
+/**
+ * Record a booking attempt whose email wouldn't parse, so the lead survives the
+ * caller hanging up in frustration. Deduped per call — Scarlett may try twice.
+ */
+async function saveFailedEmailLead(
+  ctx: ToolContext,
+  o: { name: string; phone: string; parsedRaw: string; slotStart: string; dcName: string },
+): Promise<void> {
+  try {
+    if (ctx.callId) {
+      const { data } = await db()
+        .from("leads")
+        .select("id")
+        .eq("call_id", ctx.callId)
+        .eq("intent", "discovery_call_request")
+        .limit(1);
+      if (data?.length) return;
+    }
+    await db().from("leads").insert({
+      tenant_id: ctx.tenant.id,
+      call_id: ctx.callId ?? null,
+      name: o.name,
+      phone: o.phone,
+      email: "",
+      intent: "discovery_call_request",
+      details: `Wanted ${o.dcName} at ${o.slotStart} but the email did not parse: "${o.parsedRaw}". Needs a human to confirm the address.`,
+      qualified: true,
+      status: "new",
+    });
+  } catch (e) {
+    // Never let bookkeeping break the call.
+    console.error("saveFailedEmailLead failed", e);
+  }
+}
+
+/**
+ * Text the caller their booking and the address the invite went to.
+ *
+ * This is the safety net for the failure this whole module exists to prevent:
+ * an address that parses cleanly but is still wrong (a missing "jr", gmial.com)
+ * books silently and the invite lands nowhere. Putting it in front of them on
+ * the phone they're already holding makes that recoverable instead of lost.
+ */
+async function textCallerConfirmation(
+  ctx: ToolContext,
+  o: { when: string; email: string },
+): Promise<void> {
+  const to = (ctx.callerNumber ?? "").trim();
+  if (!to || to === ctx.settings.notifyPhone) return;
+  const dest = o.email ? ` The invite is going to ${o.email} — if that's not right, just reply here with the correct address.` : "";
+  await sendSms(to, `You're booked for ${o.when}.${dest} — ${ctx.tenant.displayName}`);
+}
+
 export async function bookDiscoveryCall(
   input: Record<string, unknown>,
   ctx: ToolContext,
@@ -42,10 +97,12 @@ export async function bookDiscoveryCall(
   const name = String(input.name ?? "").trim();
   // Callers rarely dictate their number — fall back to the caller ID.
   const phone = String(input.phone ?? "").trim() || (ctx.callerNumber ?? "").trim();
-  // Spoken emails come through with stray spaces and casing from speech-to-text
-  // (e.g. "cheriselyn n1@gmail.com"); strip whitespace and lowercase so a valid
-  // address isn't rejected by the booking API over an artifact.
-  const email = String(input.email ?? "").replace(/\s+/g, "").toLowerCase();
+  // Prefer the address the caller actually confirmed through confirm_email over
+  // whatever the model retyped; otherwise run the raw value through the same
+  // deterministic parser so spoken artifacts ("cheriselyn n1@gmail.com",
+  // "ed at gmail dot com") resolve the one consistent way.
+  const parsedEmail = parseSpokenEmail(String(input.email ?? ""));
+  const email = getVerifiedEmail(ctx.vapiCallId) ?? parsedEmail.email;
   const slotStart = String(input.slot_start ?? "").trim();
 
   if (!name || !slotStart) {
@@ -63,25 +120,32 @@ export async function bookDiscoveryCall(
   }
   const end = new Date(start.getTime() + dc.durationMinutes * 60_000);
 
+  // Email gating, for BOTH booking paths. The external /book API needs an
+  // address to send the invite to; the calendar path doesn't, but a malformed
+  // address must never be written either way.
+  if (dc.api?.baseUrl && !email) {
+    return {
+      message:
+        "I'll need an email to send the calendar invite — what's the best one for you?",
+      isError: true,
+    };
+  }
+  if (email && !isValidEmail(email)) {
+    // Don't book to a bad address — but don't dead-end either. Persisting the
+    // attempt means a caller who gives up mid-loop still leaves a name, a
+    // caller ID, the slot they wanted and the raw string, instead of vanishing.
+    await saveFailedEmailLead(ctx, { name, phone, parsedRaw: parsedEmail.raw, slotStart, dcName: dc.name });
+    return {
+      message:
+        "I didn't catch that email correctly, so nothing has been booked yet. Call confirm_email with exactly what the caller says next — do not call book_discovery_call again until it comes back valid.",
+      isError: true,
+    };
+  }
+
   // External booking backend: hand the booking to the tenant's /book API so the
   // caller gets the same confirmation email + Meet link + invite as a web
   // booking. Needs an email for the invite.
   if (dc.api?.baseUrl) {
-    if (!email) {
-      return {
-        message:
-          "I'll need an email to send the calendar invite — what's the best one for you?",
-        isError: true,
-      };
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      // Malformed email — don't book to a bad address; have her re-confirm.
-      return {
-        message:
-          "I don't think I caught that email quite right — could you spell it out for me once more, letter by letter, including the part before the at sign?",
-        isError: true,
-      };
-    }
     // This message lands in the site's own "📅 New booking" notification as
     // the Notes field, so credit the assistant and keep the caller's number.
     const bookedVia = `Booked by phone through ${ctx.tenant.agentName} (AI receptionist demo).`;
@@ -146,6 +210,8 @@ export async function bookDiscoveryCall(
       ],
       smsBody: `📅 Discovery call booked: ${name} — ${bookedWhen}. ${phone}`,
     });
+
+    await textCallerConfirmation(ctx, { when: bookedWhen, email });
 
     return {
       message: `You're booked for ${bookedWhen}. You'll get a calendar invite by email. Anything else I can help with?`,
@@ -226,8 +292,13 @@ export async function bookDiscoveryCall(
     smsBody: `📅 Discovery call booked: ${name} — ${when}. ${phone}`,
   });
 
+  await textCallerConfirmation(ctx, { when, email });
+
+  // NOTE: no invite is sent on this path — createEvent deliberately omits
+  // attendees (a service account without domain-wide delegation gets a 403),
+  // so promising an email here would be a lie. The SMS above is the delivery.
   return {
-    message: `You're booked for ${when}. You'll get a calendar invite${email ? " by email" : ""}. Anything else I can help with?`,
+    message: `You're booked for ${when} — I'll text you the details. Anything else I can help with?`,
     data: { booked: true, eventId, when },
   };
 }
